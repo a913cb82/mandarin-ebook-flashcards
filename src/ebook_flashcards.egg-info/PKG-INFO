@@ -1,7 +1,9 @@
 Metadata-Version: 2.4
 Name: ebook-flashcards
 Version: 0.1.0
-Requires-Dist: google-generativeai
+Requires-Dist: ebooklib
 Requires-Dist: jieba
+Requires-Dist: litellm
 Requires-Dist: pandas
 Requires-Dist: pytest
+Requires-Dist: beautifulsoup4
