@@ -7,7 +7,8 @@ from bs4 import BeautifulSoup
 import argparse
 from io import StringIO
 
-SYSTEM_PROMPT = "TODO read prompt.txt"
+with open("src/promot.txt", "r") as f:
+    SYSTEM_PROMPT = f.read()
 
 def read_epub(file_path):
     book = epub.read_epub(file_path)
