@@ -6,10 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "ebook-flashcards"
 version = "0.1.0"
 dependencies = [
-    "google-generativeai",
+    "ebooklib",
     "jieba",
+    "litellm",
     "pandas",
     "pytest",
+    "beautifulsoup4",
 ]
 
 [tool.setuptools.packages.find]

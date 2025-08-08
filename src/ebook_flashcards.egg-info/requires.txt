@@ -1,4 +1,6 @@
-google-generativeai
+ebooklib
 jieba
+litellm
 pandas
 pytest
+beautifulsoup4
