@@ -73,7 +73,75 @@ Output
 演员\tyǎnyuán\tactor or actress; performer\tnoun\t她是女演员。\tTā shì nǚyǎnyuán.\tShe's an actress.
 冲\tchōng\tto rush; to clash; to rinse; thoroughfare\tverb\t运动员们努力地往前冲。\tYùndòngyuánmen nǔlì de wǎngqián chōng.\tThe athletes are doing their best to charge forward.
 现实\txiànshí\treality; actuality; practical\tnoun\t他无法面对现实。\tTā wúfǎ miànduì xiànshí.\tHe can't face up to reality.
-警告	jǐnggào	to warn; admonish	verb	老师警告小明不能打同学。	Lǎoshī jǐnggào Xiǎo Míng bù néng dǎ tóngxué.	The teacher warned Xiao Ming not to hit other classmates.
+import ebooklib
+from ebooklib import epub
+import jieba
+import pandas as pd
+from litellm import completion
+from bs4 import BeautifulSoup
+import argparse
+from io import StringIO
+import yaml
+
+def load_prompt(file_path):
+    with open(file_path, 'r') as f:
+        prompt_data = yaml.safe_load(f)
+    
+    sections = []
+    for key, value in prompt_data.items():
+        if isinstance(value, list):
+            sub_items = []
+            for item in value:
+                if isinstance(item, dict):
+                    sub_items.extend([f"  - {k}: {v}" for k, v in item.items()])
+                else:
+                    sub_items.append(f"  - {item}")
+            sections.append(f"{key}:
+" + "
+".join(sub_items))
+        elif isinstance(value, dict):
+            sub_sections = []
+            for sub_key, sub_value in value.items():
+                if isinstance(sub_value, dict):
+                    sub_sections.append(f"  {sub_key}:
+" + "
+".join([f"    {k}: {v}" for k, v in sub_value.items()]))
+                else:
+                    sub_sections.append(f"  {sub_key}: {sub_value}")
+            sections.append(f"{key}:
+" + "
+".join(sub_sections))
+        else:
+            sections.append(f"{key}: {value}")
+            
+    return "
+".join(sections)
+
+SYSTEM_PROMPT = load_prompt('src/prompt.yaml')
+
+def read_epub(file_path):
+    book = epub.read_epub(file_path)
+    content = []
+    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+        soup = BeautifulSoup(item.get_content(), 'html.parser')
+        content.append(soup.get_text())
+    return "
+".join(content)
+
+def extract_words(text):
+    return list(jieba.cut(text))
+
+def create_flashcards(words):
+    response = completion(
+        model="gemini/gemini-pro",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": ",".join(words)},
+        ],
+    )
+    # The response is a TSV string, so we can use pandas to parse it
+    return pd.read_csv(StringIO(response.choices[0].message.content), sep='\t', header=None)
+
 """
 
 def read_epub(file_path):

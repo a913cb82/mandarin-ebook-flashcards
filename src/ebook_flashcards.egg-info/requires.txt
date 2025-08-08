@@ -4,3 +4,4 @@ litellm
 pandas
 pytest
 beautifulsoup4
+pyyaml
