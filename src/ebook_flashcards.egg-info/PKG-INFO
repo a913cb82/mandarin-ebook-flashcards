@@ -7,3 +7,4 @@ Requires-Dist: litellm
 Requires-Dist: pandas
 Requires-Dist: pytest
 Requires-Dist: beautifulsoup4
+Requires-Dist: pyyaml
