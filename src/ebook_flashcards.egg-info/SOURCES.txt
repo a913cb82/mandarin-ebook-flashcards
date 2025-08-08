@@ -1,0 +1,12 @@
+pyproject.toml
+src/ebook_flashcards.egg-info/PKG-INFO
+src/ebook_flashcards.egg-info/SOURCES.txt
+src/ebook_flashcards.egg-info/dependency_links.txt
+src/ebook_flashcards.egg-info/requires.txt
+src/ebook_flashcards.egg-info/top_level.txt
+tests/test_ebook_reader.py
+tests/test_file_saver.py
+tests/test_flashcard_generator.py
+tests/test_integration.py
+tests/test_main.py
+tests/test_word_splitter.py
