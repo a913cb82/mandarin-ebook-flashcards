@@ -19,7 +19,10 @@ def mock_create_flashcards(words):
 def test_read_epub():
     content = read_epub('src/tests/test_book.epub')
     assert isinstance(content, str)
-    assert len(content) > 0
+    assert "第一章" in content
+    assert "第二章" in content
+    assert "第三章" in content
+    assert content.find("第一章") < content.find("第二章") < content.find("第三章")
 
 def test_extract_words():
     text = "你好世界"
