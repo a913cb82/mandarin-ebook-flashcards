@@ -21,16 +21,21 @@ def read_epub(file_path):
 def extract_words(text):
     return list(jieba.cut(text))
 
-def create_flashcards(words):
-    response = completion(
-        model="gemini/gemini-pro",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": ",".join(words)},
-        ],
-    )
-    # The response is a TSV string, so we can use pandas to parse it
-    return pd.read_csv(StringIO(response.choices[0].message.content), sep='\t', header=0)
+def create_flashcards(words, batch_size=100):
+    all_flashcards = []
+    for i in range(0, len(words), batch_size):
+        batch = words[i:i+batch_size]
+        response = completion(
+            model="gemini/gemini-pro",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": ",".join(batch)},
+            ],
+        )
+        # The response is a TSV string, so we can use pandas to parse it
+        flashcards = pd.read_csv(StringIO(response.choices[0].message.content), sep='	', header=0)
+        all_flashcards.append(flashcards)
+    return pd.concat(all_flashcards, ignore_index=True)
 
 def save_flashcards(flashcards, file_path):
     flashcards.to_csv(file_path, sep='\t', index=False, header=False)
@@ -39,11 +44,12 @@ def main():
     parser = argparse.ArgumentParser(description='Create Anki flashcards from a Chinese ebook.')
     parser.add_argument('ebook_path', type=str, help='The path to the ebook file.')
     parser.add_argument('output_path', type=str, help='The path to save the flashcards.')
+    parser.add_argument('--batch_size', type=int, default=100, help='The number of words to process in each batch.')
     args = parser.parse_args()
 
     content = read_epub(args.ebook_path)
     words = extract_words(content)
-    flashcards = create_flashcards(words)
+    flashcards = create_flashcards(words, args.batch_size)
     save_flashcards(flashcards, args.output_path)
 
 if __name__ == '__main__':

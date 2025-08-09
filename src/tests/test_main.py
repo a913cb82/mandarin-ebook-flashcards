@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 
-def mock_create_flashcards(words):
+def mock_create_flashcards(words, batch_size=None):
     data = {
         'hanzi': ['你好', '世界', '我们', '在', '打包', '东西'],
         'pinyin': ['nǐ hǎo', 'shìjiè', 'wǒmen', 'zài', 'dǎbāo', 'dōngxi'],
@@ -37,13 +37,15 @@ def test_create_flashcards(mock_completion):
     mock_response.choices[0].message.content = "hanzi\tpinyin\tdefinition\n你好\tnǐ hǎo\thello"
     mock_completion.return_value = mock_response
 
-    words = ["你好"]
-    flashcards = create_flashcards(words)
+    words = ["你好"] * 200
+    flashcards = create_flashcards(words, batch_size=50)
     assert isinstance(flashcards, pd.DataFrame)
     assert "hanzi" in flashcards.columns
     assert "pinyin" in flashcards.columns
     assert "definition" in flashcards.columns
     assert flashcards.iloc[0]['hanzi'] == "你好"
+    assert mock_completion.call_count == 4
+
 
 def test_save_flashcards():
     data = {'col1': ['a', 'b'], 'col2': ['c', 'd']}
@@ -68,7 +70,7 @@ def test_end_to_end(monkeypatch, capsys):
     output_path = 'src/tests/output.tsv'
 
     import sys
-    sys.argv = ['main.py', epub_path, output_path]
+    sys.argv = ['main.py', epub_path, output_path, '--batch_size', '10']
 
     main()
 
