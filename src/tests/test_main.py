@@ -1,6 +1,8 @@
 import pandas as pd
-from main import main
+from main import main, read_epub, extract_words, create_flashcards, save_flashcards
 import os
+import pytest
+from unittest.mock import patch, MagicMock
 
 def mock_create_flashcards(words):
     data = {
@@ -13,6 +15,48 @@ def mock_create_flashcards(words):
         'sentencetranslation': ['How are you?', 'The world is round.', 'We are friends.', 'I am at home.', 'I am packing luggage.', 'What is this thing?']
     }
     return pd.DataFrame(data)
+
+def test_read_epub():
+    content = read_epub('src/tests/test_book.epub')
+    assert isinstance(content, str)
+    assert len(content) > 0
+
+def test_extract_words():
+    text = "你好世界"
+    words = extract_words(text)
+    assert isinstance(words, list)
+    assert "你好" in words
+    assert "世界" in words
+
+@patch('main.completion')
+def test_create_flashcards(mock_completion):
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "hanzi\tpinyin\tdefinition\n你好\tnǐ hǎo\thello"
+    mock_completion.return_value = mock_response
+
+    words = ["你好"]
+    flashcards = create_flashcards(words)
+    assert isinstance(flashcards, pd.DataFrame)
+    assert "hanzi" in flashcards.columns
+    assert "pinyin" in flashcards.columns
+    assert "definition" in flashcards.columns
+    assert flashcards.iloc[0]['hanzi'] == "你好"
+
+def test_save_flashcards():
+    data = {'col1': ['a', 'b'], 'col2': ['c', 'd']}
+    df = pd.DataFrame(data)
+    output_path = 'src/tests/output.tsv'
+    save_flashcards(df, output_path)
+
+    assert os.path.exists(output_path)
+
+    with open(output_path, 'r') as f:
+        content = f.read()
+        assert "a\tc" in content
+        assert "b\td" in content
+
+    os.remove(output_path)
+
 
 def test_end_to_end(monkeypatch, capsys):
     monkeypatch.setattr('main.create_flashcards', mock_create_flashcards)

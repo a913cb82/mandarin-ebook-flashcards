@@ -30,7 +30,7 @@ def create_flashcards(words):
         ],
     )
     # The response is a TSV string, so we can use pandas to parse it
-    return pd.read_csv(StringIO(response.choices[0].message.content), sep='\t', header=None)
+    return pd.read_csv(StringIO(response.choices[0].message.content), sep='\t', header=0)
 
 def save_flashcards(flashcards, file_path):
     flashcards.to_csv(file_path, sep='\t', index=False, header=False)
