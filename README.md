@@ -9,20 +9,6 @@ This project is a Python script that extracts all the unique words from a Chines
 *   Generates flashcards with pinyin, definition, part of speech, and an example sentence
 *   Saves the flashcards as a TSV file
 
-## Installation
-
-1.  Clone the repository:
-
-    ```bash
-    git clone https://github.com/your-username/ebook-flashcards.git
-    ```
-
-2.  Install the dependencies:
-
-    ```bash
-    pip install -e .
-    ```
-
 ## Usage
 
 1.  Set your Gemini API key as an environment variable:
