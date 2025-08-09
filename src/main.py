@@ -19,7 +19,8 @@ def read_epub(file_path):
     return "\n".join(content)
 
 def extract_words(text):
-    return list(jieba.cut(text))
+    seen = set()
+    return [x for x in jieba.cut(text) if not (x in seen or seen.add(x))]
 
 def create_flashcards(words, batch_size=100):
     all_flashcards = []

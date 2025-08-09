@@ -25,11 +25,10 @@ def test_read_epub():
     assert content.find("第一章") < content.find("第二章") < content.find("第三章")
 
 def test_extract_words():
-    text = "你好世界"
+    text = "你好世界你好"
     words = extract_words(text)
     assert isinstance(words, list)
-    assert "你好" in words
-    assert "世界" in words
+    assert words == ["你好", "世界"]
 
 @patch('main.completion')
 def test_create_flashcards(mock_completion):
