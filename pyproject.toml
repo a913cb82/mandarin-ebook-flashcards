@@ -13,6 +13,7 @@ dependencies = [
     "pytest",
     "beautifulsoup4",
     "pyyaml",
+    "python-dotenv",
 ]
 
 [tool.setuptools.packages.find]

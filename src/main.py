@@ -2,12 +2,15 @@ import argparse
 from io import StringIO
 from typing import List
 
+from dotenv import load_dotenv
 import ebooklib
 import jieba
 import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from litellm import completion
+
+load_dotenv()
 
 try:
     with open("src/promot.txt", "r") as f:
@@ -182,6 +185,10 @@ def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
         The path to save the flashcards to.
     """
     flashcards.to_csv(file_path, sep="\t", index=False, header=False)
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def main() -> None:
     """
