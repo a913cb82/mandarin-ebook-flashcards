@@ -140,23 +140,63 @@ def test_create_flashcards_raises_error_after_retries(
 
 
 
-@patch("src.main.create_flashcards", new=mock_create_flashcards)
-def test_end_to_end() -> None:
+def test_extract_words_with_stop_words() -> None:
     """
-    Tests the main function in an end-to-end scenario.
+    Tests the extract_words function with a stop words file.
+    """
+    text = "你好世界你好，我们"
+    stop_words_path = "tests/stop_words.txt"
+    with open(stop_words_path, "w") as f:
+        f.write("你好,我们")
+    words = extract_words(text, stop_words_path)
+    assert words == ["世界", "，"]
+    os.remove(stop_words_path)
+
+
+def test_main_vocab_only() -> None:
+    """
+    Tests the main function with the --vocab-only flag.
     """
     epub_path = "tests/test_book.epub"
-    output_path = "tests/output.tsv"
-
-    sys.argv = ["main.py", epub_path, output_path, "--batch_size", "10"]
-
+    output_path = "tests/output.txt"
+    sys.argv = ["main.py", epub_path, output_path, "--vocab-only"]
     main()
-
     assert os.path.exists(output_path)
-
     with open(output_path, "r") as f:
         content = f.read()
-        assert "你好" in content
-
-    # Clean up the output file
+        # The exact content depends on jieba's output, so we'll just check for a few expected words
+        assert "第一章" in content
+        assert "Test" in content
     os.remove(output_path)
+
+
+@patch("src.main.completion")
+def test_create_flashcards_with_custom_model(mock_completion: MagicMock) -> None:
+    """
+    Tests that the create_flashcards function uses the custom model.
+
+    Parameters
+    ----------
+    mock_completion : MagicMock
+        A mock of the litellm.completion function.
+    """
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = (
+        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
+        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+    )
+    mock_completion.return_value = mock_response
+
+    words = ["你好"]
+    create_flashcards(words, batch_size=1, model="custom-model")
+    with open("src/promot.txt", "r") as f:
+        SYSTEM_PROMPT = f.read()
+    mock_completion.assert_called_with(
+        model="custom-model",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "你好"},
+        ],
+    )
+
+

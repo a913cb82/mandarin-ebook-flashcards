@@ -38,7 +38,7 @@ def read_epub(file_path: str) -> str:
     return "\n".join(content)
 
 
-def extract_words(text: str) -> List[str]:
+def extract_words(text: str, stop_words_path: str = None) -> List[str]:
     """
     Extracts unique words from a string of text.
 
@@ -46,18 +46,33 @@ def extract_words(text: str) -> List[str]:
     ----------
     text : str
         The text to extract words from.
+    stop_words_path : str, optional
+        The path to a file containing comma-separated stop words, by default None.
 
     Returns
     -------
     List[str]
         A list of unique words from the text.
     """
+    if stop_words_path:
+        with open(stop_words_path, "r") as f:
+            stop_words = set(f.read().split(','))
+    else:
+        stop_words = set()
+
     seen = set()
-    return [x for x in jieba.cut(text) if not (x in seen or seen.add(x))]
+    return [
+        x
+        for x in jieba.cut(text)
+        if not (x in seen or seen.add(x)) and x not in stop_words
+    ]
 
 
 def create_flashcards(
-    words: List[str], batch_size: int = 100, retries: int = 3
+    words: List[str],
+    batch_size: int = 100,
+    retries: int = 3,
+    model: str = "gemini-pro",
 ) -> pd.DataFrame:
     """
     Creates flashcards from a list of words.
@@ -70,6 +85,8 @@ def create_flashcards(
         The number of words to process in each batch, by default 100.
     retries : int, optional
         The number of times to retry a batch if it fails validation, by default 3.
+    model : str, optional
+        The name of the LLM model to use, by default "gemini-pro".
 
     Returns
     -------
@@ -81,7 +98,7 @@ def create_flashcards(
         batch = words[i : i + batch_size]
         for _ in range(retries):
             response = completion(
-                model="gemini-pro",
+                model=model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": ",".join(batch)},
@@ -96,6 +113,7 @@ def create_flashcards(
         else:
             raise ValueError(f"Failed to create valid flashcards for batch: {batch}")
     return pd.concat(all_flashcards, ignore_index=True)
+
 
 def validate_flashcards_batch(flashcards: pd.DataFrame, batch: List[str]) -> bool:
     """
@@ -135,11 +153,13 @@ def validate_flashcards_batch(flashcards: pd.DataFrame, batch: List[str]) -> boo
         return False
 
     if not all(
-        word in sentence for word, sentence in zip(flashcards["hanzi"], flashcards["sentencehanzi"])
+        word in sentence
+        for word, sentence in zip(flashcards["hanzi"], flashcards["sentencehanzi"])
     ):
         return False
 
     return True
+
 
 def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     """
@@ -177,11 +197,34 @@ def main() -> None:
         default=3,
         help="The number of times to retry a batch if it fails validation.",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gemini-pro",
+        help="The name of the LLM model to use.",
+    )
+    parser.add_argument(
+        "--vocab-only",
+        action="store_true",
+        help="Only extract the vocabulary and save it to the output file.",
+    )
+    parser.add_argument(
+        "--stop-words",
+        type=str,
+        default=None,
+        help="The path to a file containing comma-separated stop words.",
+    )
     args = parser.parse_args()
 
     content = read_epub(args.ebook_path)
-    words = extract_words(content)
-    flashcards = create_flashcards(words, args.batch_size, args.retries)
+    words = extract_words(content, args.stop_words)
+
+    if args.vocab_only:
+        with open(args.output_path, "w") as f:
+            f.write("\n".join(words))
+        return
+
+    flashcards = create_flashcards(words, args.batch_size, args.retries, args.model)
     save_flashcards(flashcards, args.output_path)
 
 
