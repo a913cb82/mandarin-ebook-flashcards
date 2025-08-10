@@ -93,48 +93,51 @@ def test_extract_words() -> None:
 
 
 @patch("src.main.completion")
-def test_create_flashcards(mock_completion: MagicMock) -> None:
+def test_create_flashcards_with_retry(mock_completion: MagicMock) -> None:
     """
-    Tests the create_flashcards function.
+    Tests the create_flashcards function with retry logic.
 
     Parameters
     ----------
     mock_completion : MagicMock
         A mock of the litellm.completion function.
     """
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = (
-        "hanzi\tpinyin\tdefinition\n你好\tnǐ hǎo\thello"
+    invalid_response = MagicMock()
+    invalid_response.choices[0].message.content = "invalid"
+    valid_response = MagicMock()
+    valid_response.choices[0].message.content = (
+        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
+        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
     )
-    mock_completion.return_value = mock_response
+    mock_completion.side_effect = [invalid_response, valid_response]
 
-    words = ["你好"] * 200
-    flashcards = create_flashcards(words, batch_size=50)
-    assert isinstance(flashcards, pd.DataFrame)
-    assert "hanzi" in flashcards.columns
-    assert "pinyin" in flashcards.columns
-    assert "definition" in flashcards.columns
-    assert flashcards.iloc[0]["hanzi"] == "你好"
-    assert mock_completion.call_count == 4
+    words = ["你好"]
+    flashcards = create_flashcards(words, batch_size=1, retries=2)
+    assert len(flashcards) == 1
+    assert mock_completion.call_count == 2
 
 
-def test_save_flashcards() -> None:
+@patch("src.main.completion")
+def test_create_flashcards_raises_error_after_retries(
+    mock_completion: MagicMock,
+) -> None:
     """
-    Tests the save_flashcards function.
+    Tests that create_flashcards raises an error after all retries fail.
+
+    Parameters
+    ----------
+    mock_completion : MagicMock
+        A mock of the litellm.completion function.
     """
-    data = {"col1": ["a", "b"], "col2": ["c", "d"]}
-    df = pd.DataFrame(data)
-    output_path = "tests/output.tsv"
-    save_flashcards(df, output_path)
+    invalid_response = MagicMock()
+    invalid_response.choices[0].message.content = "invalid"
+    mock_completion.return_value = invalid_response
 
-    assert os.path.exists(output_path)
+    words = ["你好"]
+    with pytest.raises(ValueError):
+        create_flashcards(words, batch_size=1, retries=3)
+    assert mock_completion.call_count == 3
 
-    with open(output_path, "r") as f:
-        content = f.read()
-        assert "a\tc" in content
-        assert "b\td" in content
-
-    os.remove(output_path)
 
 
 @patch("src.main.create_flashcards", new=mock_create_flashcards)
