@@ -56,7 +56,9 @@ def extract_words(text: str) -> List[str]:
     return [x for x in jieba.cut(text) if not (x in seen or seen.add(x))]
 
 
-def create_flashcards(words: List[str], batch_size: int = 100) -> pd.DataFrame:
+def create_flashcards(
+    words: List[str], batch_size: int = 100, retries: int = 3
+) -> pd.DataFrame:
     """
     Creates flashcards from a list of words.
 
@@ -66,6 +68,8 @@ def create_flashcards(words: List[str], batch_size: int = 100) -> pd.DataFrame:
         The list of words to create flashcards from.
     batch_size : int, optional
         The number of words to process in each batch, by default 100.
+    retries : int, optional
+        The number of times to retry a batch if it fails validation, by default 3.
 
     Returns
     -------
@@ -75,20 +79,67 @@ def create_flashcards(words: List[str], batch_size: int = 100) -> pd.DataFrame:
     all_flashcards = []
     for i in range(0, len(words), batch_size):
         batch = words[i : i + batch_size]
-        response = completion(
-            model="gemini-pro",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": ",".join(batch)},
-            ],
-        )
-        # The response is a TSV string, so we can use pandas to parse it
-        flashcards = pd.read_csv(
-            StringIO(response.choices[0].message.content), sep="\t", header=0
-        )
-        all_flashcards.append(flashcards)
+        for _ in range(retries):
+            response = completion(
+                model="gemini-pro",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": ",".join(batch)},
+                ],
+            )
+            flashcards = pd.read_csv(
+                StringIO(response.choices[0].message.content), sep="\t", header=0
+            )
+            if validate_flashcards_batch(flashcards, batch):
+                all_flashcards.append(flashcards)
+                break
+        else:
+            raise ValueError(f"Failed to create valid flashcards for batch: {batch}")
     return pd.concat(all_flashcards, ignore_index=True)
 
+def validate_flashcards_batch(flashcards: pd.DataFrame, batch: List[str]) -> bool:
+    """
+    Validates a batch of flashcards.
+
+    Parameters
+    ----------
+    flashcards : pd.DataFrame
+        The DataFrame of flashcards to validate.
+    batch : List[str]
+        The list of words that the flashcards were generated from.
+
+    Returns
+    -------
+    bool
+        True if the batch is valid, False otherwise.
+    """
+    if len(flashcards) != len(batch):
+        return False
+
+    expected_columns = [
+        "hanzi",
+        "pinyin",
+        "definition",
+        "partofspeech",
+        "sentencehanzi",
+        "sentencepinyin",
+        "sentencetranslation",
+    ]
+    if not all(col in flashcards.columns for col in expected_columns):
+        return False
+
+    if flashcards.isnull().values.any():
+        return False
+
+    if not all(flashcards["hanzi"] == batch):
+        return False
+
+    if not all(
+        word in sentence for word, sentence in zip(flashcards["hanzi"], flashcards["sentencehanzi"])
+    ):
+        return False
+
+    return True
 
 def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     """
@@ -102,7 +153,6 @@ def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
         The path to save the flashcards to.
     """
     flashcards.to_csv(file_path, sep="\t", index=False, header=False)
-
 
 def main() -> None:
     """
@@ -121,11 +171,17 @@ def main() -> None:
         default=100,
         help="The number of words to process in each batch.",
     )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="The number of times to retry a batch if it fails validation.",
+    )
     args = parser.parse_args()
 
     content = read_epub(args.ebook_path)
     words = extract_words(content)
-    flashcards = create_flashcards(words, args.batch_size)
+    flashcards = create_flashcards(words, args.batch_size, args.retries)
     save_flashcards(flashcards, args.output_path)
 
 
