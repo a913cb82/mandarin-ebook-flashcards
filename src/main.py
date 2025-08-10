@@ -61,11 +61,20 @@ def extract_words(text: str, stop_words_path: str = None) -> List[str]:
         stop_words = set()
 
     seen = set()
-    return [
+    words = [
         x
         for x in jieba.cut(text)
         if not (x in seen or seen.add(x)) and x not in stop_words
     ]
+
+    def is_all_chinese(word):
+        for char in word:
+            if not '\u4e00' <= char <= '\u9fff':
+                return False
+        return True
+
+    # Filter out any words that contain non-Chinese characters
+    return [word for word in words if is_all_chinese(word)]
 
 
 def create_flashcards(
