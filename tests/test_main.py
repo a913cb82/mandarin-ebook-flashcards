@@ -86,7 +86,7 @@ def test_extract_words() -> None:
     """
     Tests the extract_words function.
     """
-    text = "你好世界你好"
+    text = "你好世界你好, this is a test"
     words = extract_words(text)
     assert isinstance(words, list)
     assert words == ["你好", "世界"]
@@ -149,7 +149,7 @@ def test_extract_words_with_stop_words() -> None:
     with open(stop_words_path, "w") as f:
         f.write("你好,我们")
     words = extract_words(text, stop_words_path)
-    assert words == ["世界", "，"]
+    assert words == ["世界"]
     os.remove(stop_words_path)
 
 
@@ -166,7 +166,7 @@ def test_main_vocab_only() -> None:
         content = f.read()
         # The exact content depends on jieba's output, so we'll just check for a few expected words
         assert "第一章" in content
-        assert "Test" in content
+        assert "这是" in content
     os.remove(output_path)
 
 
