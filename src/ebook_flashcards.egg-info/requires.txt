@@ -5,3 +5,5 @@ pandas
 pytest
 beautifulsoup4
 pyyaml
+python-dotenv
+tqdm

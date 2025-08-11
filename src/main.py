@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 from io import StringIO
 from typing import List
 
@@ -9,6 +10,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from litellm import completion
+from tqdm import tqdm
 
 load_dotenv()
 
@@ -41,9 +43,15 @@ def read_epub(file_path: str) -> str:
     return "\n".join(content)
 
 
-def extract_words(text: str, stop_words_path: str = None) -> List[str]:
+def extract_vocabulary(
+    text: str,
+    stop_words_path: str = None,
+    min_freq: int = 1,
+    verbose: bool = False,
+) -> List[str]:
     """
-    Extracts unique words from a string of text.
+    Extracts words from a string of text, filters them, and returns a list of words
+    that meet the minimum frequency requirement.
 
     Parameters
     ----------
@@ -51,11 +59,15 @@ def extract_words(text: str, stop_words_path: str = None) -> List[str]:
         The text to extract words from.
     stop_words_path : str, optional
         The path to a file containing comma-separated stop words, by default None.
+    min_freq : int, optional
+        The minimum frequency for a word to be included, by default 1.
+    verbose : bool, optional
+        Whether to print verbose output, by default False.
 
     Returns
     -------
     List[str]
-        A list of unique words from the text.
+        A list of unique words from the text that meet the frequency requirement.
     """
     if stop_words_path:
         with open(stop_words_path, "r") as f:
@@ -63,21 +75,23 @@ def extract_words(text: str, stop_words_path: str = None) -> List[str]:
     else:
         stop_words = set()
 
-    seen = set()
-    words = [
-        x
-        for x in jieba.cut(text)
-        if not (x in seen or seen.add(x)) and x not in stop_words
-    ]
+    words = [word for word in jieba.cut(text) if word not in stop_words]
 
     def is_all_chinese(word):
         for char in word:
-            if not '\u4e00' <= char <= '\u9fff':
+            if not "\u4e00" <= char <= "\u9fff":
                 return False
         return True
 
-    # Filter out any words that contain non-Chinese characters
-    return [word for word in words if is_all_chinese(word)]
+    words = [word for word in words if is_all_chinese(word)]
+    word_counts = Counter(words)
+
+    if verbose:
+        for i in range(1, min_freq + 1):
+            vocab_size = len([word for word, count in word_counts.items() if count >= i])
+            print(f"Vocabulary size with min_freq={i}: {vocab_size}")
+
+    return [word for word, count in word_counts.items() if count >= min_freq]
 
 
 def create_flashcards(
@@ -85,6 +99,7 @@ def create_flashcards(
     batch_size: int = 100,
     retries: int = 3,
     model: str = "gemini-pro",
+    verbose: bool = False,
 ) -> pd.DataFrame:
     """
     Creates flashcards from a list of words.
@@ -99,6 +114,9 @@ def create_flashcards(
         The number of times to retry a batch if it fails validation, by default 3.
     model : str, optional
         The name of the LLM model to use, by default "gemini-pro".
+    verbose : bool, optional
+        Whether to print verbose output, by default False.
+
 
     Returns
     -------
@@ -106,7 +124,11 @@ def create_flashcards(
         A DataFrame containing the flashcards.
     """
     all_flashcards = []
-    for i in range(0, len(words), batch_size):
+    range_iterator = range(0, len(words), batch_size)
+    if verbose:
+        range_iterator = tqdm(range_iterator, desc="Creating flashcards")
+
+    for i in range_iterator:
         batch = words[i : i + batch_size]
         for _ in range(retries):
             response = completion(
@@ -230,19 +252,35 @@ def main() -> None:
         default=None,
         help="The path to a file containing comma-separated stop words.",
     )
+    parser.add_argument(
+        "--min-frequency",
+        type=int,
+        default=1,
+        help="The minimum frequency for a word to be included.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print verbose output.",
+    )
     args = parser.parse_args()
 
     content = read_epub(args.ebook_path)
-    words = extract_words(content, args.stop_words)
+    words = extract_vocabulary(
+        content, args.stop_words, args.min_frequency, args.verbose
+    )
 
     if args.vocab_only:
         with open(args.output_path, "w") as f:
             f.write("\n".join(words))
         return
 
-    flashcards = create_flashcards(words, args.batch_size, args.retries, args.model)
+    flashcards = create_flashcards(
+        words, args.batch_size, args.retries, args.model, args.verbose
+    )
     save_flashcards(flashcards, args.output_path)
 
 
 if __name__ == "__main__":
     main()
+

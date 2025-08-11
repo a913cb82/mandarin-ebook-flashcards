@@ -8,3 +8,5 @@ Requires-Dist: pandas
 Requires-Dist: pytest
 Requires-Dist: beautifulsoup4
 Requires-Dist: pyyaml
+Requires-Dist: python-dotenv
+Requires-Dist: tqdm
