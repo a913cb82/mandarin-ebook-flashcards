@@ -7,67 +7,11 @@ import pytest
 
 from src.main import (
     create_flashcards,
-    extract_words,
+    extract_vocabulary,
     main,
     read_epub,
     save_flashcards,
 )
-
-
-def mock_create_flashcards(*args, **kwargs) -> pd.DataFrame:
-    """
-    A mock version of the create_flashcards function.
-
-    Returns
-    -------
-    pd.DataFrame
-        A DataFrame containing sample flashcards.
-    """
-    data = {
-        "hanzi": ["你好", "世界", "我们", "在", "打包", "东西"],
-        "pinyin": ["nǐ hǎo", "shìjiè", "wǒmen", "zài", "dǎbāo", "dōngxi"],
-        "definition": [
-            "hello",
-            "world",
-            "we/us",
-            "at/in",
-            "to pack",
-            "thing/stuff",
-        ],
-        "partofspeech": [
-            "greeting",
-            "noun",
-            "pronoun",
-            "preposition",
-            "verb",
-            "noun",
-        ],
-        "sentencehanzi": [
-            "你好吗？",
-            "世界是圆的。",
-            "我们是朋友。",
-            "我在家。",
-            "我在打包行李。",
-            "这是什么东西？",
-        ],
-        "sentencepinyin": [
-            "Nǐ hǎo ma?",
-            "Shìjiè shì yuán de.",
-            "Wǒmen shì péngyǒu.",
-            "Wǒ zài jiā.",
-            "Wǒ zài dǎbāo xínglǐ.",
-            "Zhè shì shénme dōngxi?",
-        ],
-        "sentencetranslation": [
-            "How are you?",
-            "The world is round.",
-            "We are friends.",
-            "I am at home.",
-            "I am packing luggage.",
-            "What is this thing?",
-        ],
-    }
-    return pd.DataFrame(data)
 
 
 def test_read_epub() -> None:
@@ -82,14 +26,35 @@ def test_read_epub() -> None:
     assert content.find("第一章") < content.find("第二章") < content.find("第三章")
 
 
-def test_extract_words() -> None:
+def test_extract_vocabulary() -> None:
     """
-    Tests the extract_words function.
+    Tests the extract_vocabulary function.
     """
     text = "你好世界你好, this is a test"
-    words = extract_words(text)
+    words = extract_vocabulary(text)
     assert isinstance(words, list)
-    assert words == ["你好", "世界"]
+    assert set(words) == {"你好", "世界"}
+
+
+def test_extract_vocabulary_with_min_freq() -> None:
+    """
+    Tests the extract_vocabulary function with the min_freq argument.
+    """
+    text = "你好世界你好我们我们我们"
+    words = extract_vocabulary(text, min_freq=2)
+    assert set(words) == {"你好", "我们"}
+
+
+@patch("builtins.print")
+def test_extract_vocabulary_with_verbose(mock_print: MagicMock) -> None:
+    """
+    Tests the extract_vocabulary function with the verbose argument.
+    """
+    text = "你好世界你好我们我们我们"
+    extract_vocabulary(text, min_freq=3, verbose=True)
+    mock_print.assert_any_call("Vocabulary size with min_freq=1: 3")
+    mock_print.assert_any_call("Vocabulary size with min_freq=2: 2")
+    mock_print.assert_any_call("Vocabulary size with min_freq=3: 1")
 
 
 @patch("src.main.completion")
@@ -139,18 +104,18 @@ def test_create_flashcards_raises_error_after_retries(
     assert mock_completion.call_count == 3
 
 
-
-def test_extract_words_with_stop_words() -> None:
+def test_extract_vocabulary_with_stop_words() -> None:
     """
-    Tests the extract_words function with a stop words file.
+    Tests the extract_vocabulary function with a stop words file.
     """
     text = "你好世界你好，我们"
     stop_words_path = "tests/stop_words.txt"
     with open(stop_words_path, "w") as f:
         f.write("你好,我们")
-    words = extract_words(text, stop_words_path)
+    words = extract_vocabulary(text, stop_words_path=stop_words_path)
     assert words == ["世界"]
     os.remove(stop_words_path)
+
 
 
 def test_main_vocab_only() -> None:
