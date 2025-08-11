@@ -15,11 +15,8 @@ from tqdm import tqdm
 
 load_dotenv()
 
-try:
-    with open("src/promot.txt", "r") as f:
-        SYSTEM_PROMPT = f.read()
-except FileNotFoundError:
-    SYSTEM_PROMPT = "You are a helpful assistant that creates flashcards for language learning."
+with open("src/promot.txt", "r") as f:
+    SYSTEM_PROMPT = f.read()
 
 
 def read_epub(file_path: str) -> str:
