@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from collections import Counter
 from io import StringIO
@@ -144,6 +145,28 @@ def create_flashcards(
 
     retry_counts = {word: 0 for word in words_to_process}
 
+    flashcard_schema = {
+        "type": "object",
+        "properties": {
+            "hanzi": {"type": "string"},
+            "pinyin": {"type": "string"},
+            "definition": {"type": "string"},
+            "partofspeech": {"type": "string"},
+            "sentencehanzi": {"type": "string"},
+            "sentencepinyin": {"type": "string"},
+            "sentencetranslation": {"type": "string"},
+        },
+        "required": [
+            "hanzi",
+            "pinyin",
+            "definition",
+            "partofspeech",
+            "sentencehanzi",
+            "sentencepinyin",
+            "sentencetranslation",
+        ],
+    }
+
     while words_to_process:
         batch = words_to_process[:batch_size]
         words_to_process = words_to_process[batch_size:]
@@ -155,9 +178,16 @@ def create_flashcards(
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": ",".join(batch)},
                 ],
+                response_format={
+                    "type": "json_object",
+                    "schema": {
+                        "type": "array",
+                        "items": flashcard_schema,
+                    },
+                },
             )
-            response_df = pd.read_csv(
-                StringIO(response.choices[0].message.content), sep="\t", header=0
+            response_df = pd.DataFrame(
+                json.loads(response.choices[0].message.content)
             )
         except Exception as e:
             if verbose:
@@ -199,7 +229,6 @@ def create_flashcards(
         return pd.DataFrame()
     
     return pd.concat([card.to_frame().T for card in final_flashcards], ignore_index=True)
-
 
 
 def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
@@ -327,5 +356,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
