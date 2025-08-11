@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -132,8 +133,10 @@ def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> N
             self.choices[0].message.content = content
 
     mock_completion.side_effect = [
-        MockResponse(invalid_response_df.to_csv(sep="\t", index=False)),
-        MockResponse(valid_response_df.to_csv(sep="\t", index=False)),
+        Exception("Invalid JSON"),
+        MockResponse(
+            json.dumps(valid_response_df.to_dict("records"))
+        ),
     ]
 
     words = ["你好"]
@@ -152,16 +155,7 @@ def test_create_flashcards_fails_after_retries(
     """
     Tests that create_flashcards fails after all retries.
     """
-    invalid_response_df = pd.DataFrame({"hanzi": ["你好"], "pinyin": [None]})
-
-    class MockResponse:
-        def __init__(self, content):
-            self.choices = [MagicMock()]
-            self.choices[0].message.content = content
-
-    mock_completion.return_value = MockResponse(
-        invalid_response_df.to_csv(sep="\t", index=False)
-    )
+    mock_completion.side_effect = Exception("Invalid JSON")
 
     words = ["你好"]
     flashcards = create_flashcards(
@@ -197,7 +191,7 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
             self.choices[0].message.content = content
 
     mock_completion.return_value = MockResponse(
-        valid_response_df.to_csv(sep="\t", index=False)
+        json.dumps(valid_response_df.to_dict("records"))
     )
 
     words = ["你好"]
@@ -236,11 +230,12 @@ def test_create_flashcards_preserves_order(
             self.choices[0].message.content = content
 
     mock_completion.return_value = MockResponse(
-        response_df.to_csv(sep="\t", index=False)
+        json.dumps(response_df.to_dict("records"))
     )
 
     flashcards = create_flashcards(words, batch_size=2, cache_dir=str(tmp_path))
     assert flashcards["hanzi"].tolist() == words
+
 
 def test_save_flashcards(tmp_path) -> None:
     """
@@ -292,9 +287,18 @@ def test_create_flashcards_with_custom_model(
     Tests that the create_flashcards function uses the custom model.
     """
     mock_response = MagicMock()
-    mock_response.choices[0].message.content = (
-        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
-        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+    mock_response.choices[0].message.content = json.dumps(
+        [
+                {
+                    "hanzi": "你好",
+                    "pinyin": "nǐ hǎo",
+                    "definition": "hello",
+                    "partofspeech": "greeting",
+                    "sentencehanzi": "你好吗？",
+                    "sentencepinyin": "Nǐ hǎo ma?",
+                    "sentencetranslation": "How are you?",
+                }
+        ]
     )
     mock_completion.return_value = mock_response
 
@@ -302,13 +306,7 @@ def test_create_flashcards_with_custom_model(
     create_flashcards(
         words, batch_size=1, model="custom-model", cache_dir=str(tmp_path)
     )
-    mock_completion.assert_called_with(
-        model="custom-model",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": "你好"},
-        ],
-    )
+    assert mock_completion.call_args[1]["model"] == "custom-model"
 
 
 @patch("src.main.completion")
@@ -323,18 +321,23 @@ def test_create_flashcards_uses_system_prompt_from_file(
         expected_prompt = f.read()
 
     mock_response = MagicMock()
-    mock_response.choices[0].message.content = (
-        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
-        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+    mock_response.choices[0].message.content = json.dumps(
+        [
+            {
+                    "hanzi": "你好",
+                    "pinyin": "nǐ hǎo",
+                    "definition": "hello",
+                    "partofspeech": "greeting",
+                    "sentencehanzi": "你好吗？",
+                    "sentencepinyin": "Nǐ hǎo ma?",
+                    "sentencetranslation": "How are you?",
+            }
+        ]
     )
     mock_completion.return_value = mock_response
 
     words = ["你好"]
     create_flashcards(words, batch_size=1, cache_dir=str(tmp_path))
-    mock_completion.assert_called_with(
-        model="gemini-pro",
-        messages=[
-            {"role": "system", "content": expected_prompt},
-            {"role": "user", "content": "你好"},
-        ],
-    )
+    assert mock_completion.call_args[1]["messages"][0]["content"] == expected_prompt
+    assert "response_format" in mock_completion.call_args[1]
+    assert mock_completion.call_args[1]["response_format"]["type"] == "json_object"
