@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 load_dotenv()
 
-with open("src/promot.txt", "r") as f:
+with open("src/system_prompt.txt", "r") as f:
     SYSTEM_PROMPT = f.read()
 
 
