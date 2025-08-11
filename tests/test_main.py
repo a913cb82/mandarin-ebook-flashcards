@@ -9,6 +9,7 @@ import pytest
 from pandas.testing import assert_series_equal
 
 from src.main import (
+    SYSTEM_PROMPT,
     create_flashcards,
     extract_vocabulary,
     main,
@@ -136,14 +137,17 @@ def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> N
     ]
 
     words = ["你好"]
-    flashcards = create_flashcards(words, batch_size=1, retries=2, cache_dir=str(tmp_path))
+    flashcards = create_flashcards(
+        words, batch_size=1, retries=2, cache_dir=str(tmp_path)
+    )
     assert len(flashcards) == 1
     assert mock_completion.call_count == 2
 
 
 @patch("src.main.completion")
 def test_create_flashcards_fails_after_retries(
-    mock_completion: MagicMock, tmp_path
+    mock_completion: MagicMock,
+    tmp_path,
 ) -> None:
     """
     Tests that create_flashcards fails after all retries.
@@ -160,9 +164,11 @@ def test_create_flashcards_fails_after_retries(
     )
 
     words = ["你好"]
-    flashcards = create_flashcards(words, batch_size=1, retries=3, cache_dir=str(tmp_path))
+    flashcards = create_flashcards(
+        words, batch_size=1, retries=3, cache_dir=str(tmp_path)
+    )
     assert len(flashcards) == 0
-    assert mock_completion.call_count == 3 # 1 initial call + 2 retries
+    assert mock_completion.call_count == 3  # 1 initial call + 2 retries
 
 
 @patch("src.main.completion")
@@ -184,13 +190,15 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
             "sentencetranslation": ["How are you?"],
         }
     )
-    
+
     class MockResponse:
         def __init__(self, content):
             self.choices = [MagicMock()]
             self.choices[0].message.content = content
 
-    mock_completion.return_value = MockResponse(valid_response_df.to_csv(sep="\t", index=False))
+    mock_completion.return_value = MockResponse(
+        valid_response_df.to_csv(sep="\t", index=False)
+    )
 
     words = ["你好"]
     create_flashcards(words, batch_size=1, cache_dir=str(cache_dir))
@@ -203,7 +211,8 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
 
 @patch("src.main.completion")
 def test_create_flashcards_preserves_order(
-    mock_completion: MagicMock, tmp_path
+    mock_completion: MagicMock,
+    tmp_path,
 ) -> None:
     """
     Tests that create_flashcards preserves the order of the input words.
@@ -220,13 +229,15 @@ def test_create_flashcards_preserves_order(
             "sentencetranslation": ["How are you?", "Hello world"],
         }
     )
-    
+
     class MockResponse:
         def __init__(self, content):
             self.choices = [MagicMock()]
             self.choices[0].message.content = content
 
-    mock_completion.return_value = MockResponse(response_df.to_csv(sep="\t", index=False))
+    mock_completion.return_value = MockResponse(
+        response_df.to_csv(sep="\t", index=False)
+    )
 
     flashcards = create_flashcards(words, batch_size=2, cache_dir=str(tmp_path))
     assert flashcards["hanzi"].tolist() == words
@@ -251,7 +262,10 @@ def test_save_flashcards(tmp_path) -> None:
     assert os.path.exists(output_path)
     with open(output_path, "r") as f:
         content = f.read()
-        assert content.strip() == "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+        assert (
+            content.strip()
+            == "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+        )
 
 
 def test_main_vocab_only(tmp_path) -> None:
@@ -270,26 +284,57 @@ def test_main_vocab_only(tmp_path) -> None:
 
 
 @patch("src.main.completion")
-def test_create_flashcards_with_custom_model(mock_completion: MagicMock, tmp_path) -> None:
+def test_create_flashcards_with_custom_model(
+    mock_completion: MagicMock,
+    tmp_path,
+) -> None:
     """
     Tests that the create_flashcards function uses the custom model.
     """
-    with patch("src.main.SYSTEM_PROMPT", "test prompt") as mock_prompt:
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = (
-            "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
-            "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
-        )
-        mock_completion.return_value = mock_response
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = (
+        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
+        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+    )
+    mock_completion.return_value = mock_response
 
-        words = ["你好"]
-        create_flashcards(words, batch_size=1, model="custom-model", cache_dir=str(tmp_path))
-        mock_completion.assert_called_with(
-            model="custom-model",
-            messages=[
-                {"role": "system", "content": mock_prompt},
-                {"role": "user", "content": "你好"},
-            ],
-        )
+    words = ["你好"]
+    create_flashcards(
+        words, batch_size=1, model="custom-model", cache_dir=str(tmp_path)
+    )
+    mock_completion.assert_called_with(
+        model="custom-model",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "你好"},
+        ],
+    )
 
 
+@patch("src.main.completion")
+def test_create_flashcards_uses_system_prompt_from_file(
+    mock_completion: MagicMock,
+    tmp_path,
+) -> None:
+    """
+    Tests that create_flashcards uses the system prompt from the file.
+    """
+    with open("src/system_prompt.txt", "r") as f:
+        expected_prompt = f.read()
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = (
+        "hanzi\tpinyin\tdefinition\tpartofspeech\tsentencehanzi\tsentencepinyin\tsentencetranslation\n"
+        "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+    )
+    mock_completion.return_value = mock_response
+
+    words = ["你好"]
+    create_flashcards(words, batch_size=1, cache_dir=str(tmp_path))
+    mock_completion.assert_called_with(
+        model="gemini-pro",
+        messages=[
+            {"role": "system", "content": expected_prompt},
+            {"role": "user", "content": "你好"},
+        ],
+    )
