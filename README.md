@@ -28,5 +28,5 @@ This project is a Python script that extracts all the unique words from a Chines
 To run the tests, run the following command:
 
 ```bash
-pytest
+python -m pytest
 ```
