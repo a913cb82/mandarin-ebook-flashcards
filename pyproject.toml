@@ -9,6 +9,7 @@ dependencies = [
     "ebooklib",
     "jieba",
     "litellm",
+    "litellm[proxy]",
     "pandas",
     "pytest",
     "beautifulsoup4",
