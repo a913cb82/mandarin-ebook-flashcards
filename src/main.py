@@ -1,7 +1,8 @@
 import argparse
+import os
 from collections import Counter
 from io import StringIO
-from typing import List
+from typing import Dict, List
 
 from dotenv import load_dotenv
 import ebooklib
@@ -100,9 +101,10 @@ def create_flashcards(
     retries: int = 3,
     model: str = "gemini-pro",
     verbose: bool = False,
+    cache_dir: str = ".flashcard_cache",
 ) -> pd.DataFrame:
     """
-    Creates flashcards from a list of words.
+    Creates flashcards from a list of words with caching and retries.
 
     Parameters
     ----------
@@ -111,26 +113,45 @@ def create_flashcards(
     batch_size : int, optional
         The number of words to process in each batch, by default 100.
     retries : int, optional
-        The number of times to retry a batch if it fails validation, by default 3.
+        The number of times to retry a word if it fails validation, by default 3.
     model : str, optional
         The name of the LLM model to use, by default "gemini-pro".
     verbose : bool, optional
         Whether to print verbose output, by default False.
-
+    cache_dir : str, optional
+        The directory to cache flashcards, by default ".flashcard_cache".
 
     Returns
     -------
     pd.DataFrame
-        A DataFrame containing the flashcards.
+        A DataFrame containing the flashcards, in the same order as the input words.
     """
-    all_flashcards = []
-    range_iterator = range(0, len(words), batch_size)
-    if verbose:
-        range_iterator = tqdm(range_iterator, desc="Creating flashcards")
+    os.makedirs(cache_dir, exist_ok=True)
+    flashcards_map: Dict[str, pd.Series] = {}
+    words_to_process = []
 
-    for i in range_iterator:
-        batch = words[i : i + batch_size]
-        for _ in range(retries):
+    for word in words:
+        cache_path = os.path.join(cache_dir, f"{word}.json")
+        if os.path.exists(cache_path):
+            flashcards_map[word] = pd.read_json(cache_path, typ="series")
+        else:
+            words_to_process.append(word)
+
+    pbar = (
+        tqdm(total=len(words), desc="Creating flashcards")
+        if verbose
+        else None
+    )
+    if pbar:
+        pbar.update(len(flashcards_map))
+
+    retry_counts = {word: 0 for word in words_to_process}
+
+    while words_to_process:
+        batch = words_to_process[:batch_size]
+        words_to_process = words_to_process[batch_size:]
+
+        try:
             response = completion(
                 model=model,
                 messages=[
@@ -138,36 +159,68 @@ def create_flashcards(
                     {"role": "user", "content": ",".join(batch)},
                 ],
             )
-            flashcards = pd.read_csv(
+            response_df = pd.read_csv(
                 StringIO(response.choices[0].message.content), sep="\t", header=0
             )
-            if validate_flashcards_batch(flashcards, batch):
-                all_flashcards.append(flashcards)
-                break
-        else:
-            raise ValueError(f"Failed to create valid flashcards for batch: {batch}")
-    return pd.concat(all_flashcards, ignore_index=True)
+        except Exception as e:
+            if verbose:
+                print(f"Error processing batch: {e}")
+            for word in batch:
+                retry_counts[word] += 1
+                if retry_counts[word] < retries:
+                    words_to_process.append(word)
+                elif verbose:
+                    print(f"Failed to create valid flashcard for word: {word}")
+                    if pbar:
+                        pbar.update(1)
+            continue
+
+        response_map = {row["hanzi"]: row for _, row in response_df.iterrows()}
+
+        for word in batch:
+            if word in response_map and validate_flashcard(response_map[word], word):
+                flashcard = response_map[word]
+                flashcards_map[word] = flashcard
+                cache_path = os.path.join(cache_dir, f"{word}.json")
+                flashcard.to_json(cache_path)
+                if pbar:
+                    pbar.update(1)
+            else:
+                retry_counts[word] += 1
+                if retry_counts[word] < retries:
+                    words_to_process.append(word)
+                elif verbose:
+                    print(f"Failed to create valid flashcard for word: {word}")
+                    if pbar:
+                        pbar.update(1)
+
+    if pbar:
+        pbar.close()
+
+    final_flashcards = [flashcards_map[word] for word in words if word in flashcards_map]
+    if not final_flashcards:
+        return pd.DataFrame()
+    
+    return pd.concat([card.to_frame().T for card in final_flashcards], ignore_index=True)
 
 
-def validate_flashcards_batch(flashcards: pd.DataFrame, batch: List[str]) -> bool:
+
+def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
     """
-    Validates a batch of flashcards.
+    Validates a single flashcard.
 
     Parameters
     ----------
-    flashcards : pd.DataFrame
-        The DataFrame of flashcards to validate.
-    batch : List[str]
-        The list of words that the flashcards were generated from.
+    flashcard : pd.Series
+        The flashcard to validate.
+    word : str
+        The word that the flashcard was generated from.
 
     Returns
     -------
     bool
-        True if the batch is valid, False otherwise.
+        True if the flashcard is valid, False otherwise.
     """
-    if len(flashcards) != len(batch):
-        return False
-
     expected_columns = [
         "hanzi",
         "pinyin",
@@ -177,19 +230,16 @@ def validate_flashcards_batch(flashcards: pd.DataFrame, batch: List[str]) -> boo
         "sentencepinyin",
         "sentencetranslation",
     ]
-    if not all(col in flashcards.columns for col in expected_columns):
+    if not all(col in flashcard.index for col in expected_columns):
         return False
 
-    if flashcards.isnull().values.any():
+    if flashcard.isnull().any():
         return False
 
-    if not all(flashcards["hanzi"] == batch):
+    if flashcard["hanzi"] != word:
         return False
 
-    if not all(
-        word in sentence
-        for word, sentence in zip(flashcards["hanzi"], flashcards["sentencehanzi"])
-    ):
+    if word not in flashcard["sentencehanzi"]:
         return False
 
     return True
@@ -208,9 +258,6 @@ def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     """
     flashcards.to_csv(file_path, sep="\t", index=False, header=False)
 
-from dotenv import load_dotenv
-
-load_dotenv()
 
 def main() -> None:
     """
@@ -283,4 +330,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
