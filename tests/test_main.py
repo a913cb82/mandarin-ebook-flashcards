@@ -278,6 +278,38 @@ def test_main_vocab_only(tmp_path) -> None:
         assert "这是" in content
 
 
+@patch("src.main.create_flashcards")
+def test_flashcards_only(mock_create_flashcards, tmp_path):
+    vocab_content = """
+你好
+世界
+"""
+    vocab_path = tmp_path / "vocab.txt"
+    vocab_path.write_text(vocab_content)
+
+    output_path = tmp_path / "flashcards.txt"
+    
+    mock_flashcards = pd.DataFrame({
+        "hanzi": ["你好", "世界"],
+        "pinyin": ["nǐ hǎo", "shì jiè"],
+        "definition": ["hello", "world"],
+        "partofspeech": ["interjection", "noun"],
+        "sentencehanzi": ["你好，世界", "你好，世界"],
+        "sentencepinyin": ["nǐ hǎo, shì jiè", "nǐ hǎo, shì jiè"],
+        "sentencetranslation": ["Hello, world", "Hello, world"],
+    })
+    mock_create_flashcards.return_value = mock_flashcards
+
+    with patch("sys.argv", ["src/main.py", str(vocab_path), str(output_path), "--flashcards-only"]):
+        main()
+
+    assert os.path.exists(output_path)
+    
+    result_df = pd.read_csv(output_path, sep="\t", header=None)
+    assert len(result_df) == 2
+    assert result_df.iloc[0, 0] == "你好"
+
+
 @patch("src.main.completion")
 def test_create_flashcards_with_custom_model(
     mock_completion: MagicMock,

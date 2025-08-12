@@ -201,7 +201,8 @@ def create_flashcards(
             if verbose:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
-                print(f"{response=}")
+                if response and response.choices:
+                    print(f"{response.choices[0].message.content=}")
             for word in batch:
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:
@@ -302,7 +303,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create Anki flashcards from a Chinese ebook."
     )
-    parser.add_argument("ebook_path", type=str, help="The path to the ebook file.")
+    parser.add_argument("input_path", type=str, help="The path to the input file (ebook or vocab list).")
     parser.add_argument(
         "output_path", type=str, help="The path to save the flashcards."
     )
@@ -346,12 +347,21 @@ def main() -> None:
         action="store_true",
         help="Print verbose output.",
     )
+    parser.add_argument(
+        "--flashcards-only",
+        action="store_true",
+        help="Treat the input file as a vocab list and generate flashcards.",
+    )
     args = parser.parse_args()
 
-    content = read_epub(args.ebook_path)
-    words = extract_vocabulary(
-        content, args.stop_words, args.min_frequency, args.verbose
-    )
+    if args.flashcards_only:
+        with open(args.input_path, "r") as f:
+            words = [line.strip() for line in f]
+    else:
+        content = read_epub(args.input_path)
+        words = extract_vocabulary(
+            content, args.stop_words, args.min_frequency, args.verbose
+        )
 
     if args.vocab_only:
         with open(args.output_path, "w") as f:
