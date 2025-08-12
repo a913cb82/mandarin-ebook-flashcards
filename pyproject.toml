@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml",
     "python-dotenv",
     "tqdm",
+    "toml",
 ]
 
 [tool.setuptools.packages.find]
