@@ -170,8 +170,10 @@ def create_flashcards(
     while words_to_process:
         batch = words_to_process[:batch_size]
         words_to_process = words_to_process[batch_size:]
+        response = None
 
         try:
+            response = None
             response = completion(
                 model=model,
                 messages=[
@@ -179,11 +181,12 @@ def create_flashcards(
                     {"role": "user", "content": ",".join(batch)},
                 ],
                 response_format={
-                    "type": "json_object",
-                    "schema": {
+                    "type": "json_schema",
+                    "json_schema": {
                         "type": "array",
                         "items": flashcard_schema,
                     },
+                    "strict": True,
                 },
             )
             response_df = pd.DataFrame(
@@ -192,6 +195,8 @@ def create_flashcards(
         except Exception as e:
             if verbose:
                 print(f"Error processing batch: {e}")
+                print(f"{batch=}")
+                print(f"{response=}")
             for word in batch:
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:
@@ -311,7 +316,7 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="gemini-pro",
+        default="gemini/gemini-2.5-pro",
         help="The name of the LLM model to use.",
     )
     parser.add_argument(
