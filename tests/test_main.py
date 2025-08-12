@@ -309,6 +309,8 @@ def test_create_flashcards_with_custom_model(
     assert mock_completion.call_args[1]["model"] == "custom-model"
 
 
+import toml
+
 @patch("src.main.completion")
 def test_create_flashcards_uses_system_prompt_from_file(
     mock_completion: MagicMock,
@@ -317,20 +319,27 @@ def test_create_flashcards_uses_system_prompt_from_file(
     """
     Tests that create_flashcards uses the system prompt from the file.
     """
-    with open("src/system_prompt.txt", "r") as f:
-        expected_prompt = f.read()
+    with open("src/system_prompt.toml", "r") as f:
+        prompt_data = toml.load(f)
+        expected_prompt = prompt_data["system_prompt"]
+        few_shot_examples = prompt_data["examples"]
+
+    expected_messages = [{"role": "system", "content": expected_prompt}]
+    for example in few_shot_examples:
+        expected_messages.append({"role": "user", "content": example["input"]})
+        expected_messages.append({"role": "assistant", "content": example["output"]})
 
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(
         [
             {
-                    "hanzi": "你好",
-                    "pinyin": "nǐ hǎo",
-                    "definition": "hello",
-                    "partofspeech": "greeting",
-                    "sentencehanzi": "你好吗？",
-                    "sentencepinyin": "Nǐ hǎo ma?",
-                    "sentencetranslation": "How are you?",
+                "hanzi": "你好",
+                "pinyin": "nǐ hǎo",
+                "definition": "hello",
+                "partofspeech": "greeting",
+                "sentencehanzi": "你好吗？",
+                "sentencepinyin": "Nǐ hǎo ma?",
+                "sentencetranslation": "How are you?",
             }
         ]
     )
@@ -338,6 +347,10 @@ def test_create_flashcards_uses_system_prompt_from_file(
 
     words = ["你好"]
     create_flashcards(words, batch_size=1, cache_dir=str(tmp_path))
-    assert mock_completion.call_args[1]["messages"][0]["content"] == expected_prompt
+    
+    actual_messages = mock_completion.call_args[1]["messages"]
+    assert actual_messages[:len(expected_messages)] == expected_messages
+    assert actual_messages[-1] == {"role": "user", "content": ",".join(words)}
+    
     assert "response_format" in mock_completion.call_args[1]
-    assert mock_completion.call_args[1]["response_format"]["type"] == "json_object"
+    assert mock_completion.call_args[1]["response_format"]["type"] == "json_schema"

@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import toml
 from collections import Counter
 from io import StringIO
 from typing import Dict, List
@@ -16,8 +17,10 @@ from tqdm import tqdm
 
 load_dotenv()
 
-with open("src/system_prompt.txt", "r") as f:
-    SYSTEM_PROMPT = f.read()
+with open("src/system_prompt.toml", "r") as f:
+    prompt_data = toml.load(f)
+    SYSTEM_PROMPT = prompt_data["system_prompt"]
+    FEW_SHOT_EXAMPLES = prompt_data["examples"]
 
 
 def read_epub(file_path: str) -> str:
@@ -167,6 +170,11 @@ def create_flashcards(
         ],
     }
 
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for example in FEW_SHOT_EXAMPLES:
+        messages.append({"role": "user", "content": example["input"]})
+        messages.append({"role": "assistant", "content": example["output"]})
+
     while words_to_process:
         batch = words_to_process[:batch_size]
         words_to_process = words_to_process[batch_size:]
@@ -176,10 +184,7 @@ def create_flashcards(
             response = None
             response = completion(
                 model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": ",".join(batch)},
-                ],
+                messages=messages + [{"role": "user", "content": ",".join(batch)}],
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
