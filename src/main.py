@@ -12,10 +12,11 @@ import jieba
 import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
-from litellm import completion
+import google.generativeai as genai
 from tqdm import tqdm
 
 load_dotenv()
+genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
 with open("src/system_prompt.toml", "r") as f:
     prompt_data = toml.load(f)
@@ -170,10 +171,28 @@ def create_flashcards(
         ],
     }
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = []
     for example in FEW_SHOT_EXAMPLES:
-        messages.append({"role": "user", "content": example["input"]})
-        messages.append({"role": "assistant", "content": example["output"]})
+        messages.append({"role": "user", "parts": [example["input"]]})
+        messages.append({"role": "model", "parts": [example["output"]]})
+
+    llm_model = genai.GenerativeModel(
+        model,
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": {
+                "type": "array",
+                "items": flashcard_schema,
+            },
+        },
+        system_instruction=SYSTEM_PROMPT,
+        safety_settings={
+            'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
+            'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
+            'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
+            'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
+        }
+    )
 
     while words_to_process:
         batch = words_to_process[:batch_size]
@@ -181,28 +200,16 @@ def create_flashcards(
         response = None
 
         try:
-            response = None
-            response = completion(
-                model=model,
-                messages=messages + [{"role": "user", "content": ",".join(batch)}],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "type": "array",
-                        "items": flashcard_schema,
-                    },
-                    "strict": True,
-                },
-            )
+            response = llm_model.generate_content(messages + [{"role": "user", "parts": [",".join(batch)]}])
             response_df = pd.DataFrame(
-                json.loads(response.choices[0].message.content)
+                json.loads(response.text)
             )
         except Exception as e:
             if verbose:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
-                if response and response.choices:
-                    print(f"{response.choices[0].message.content=}")
+                if response and response.parts:
+                    print(f"{response.parts=}")
             for word in batch:
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:
@@ -322,7 +329,7 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="gemini/gemini-2.5-pro",
+        default="gemini-pro",
         help="The name of the LLM model to use.",
     )
     parser.add_argument(
@@ -352,6 +359,12 @@ def main() -> None:
         action="store_true",
         help="Treat the input file as a vocab list and generate flashcards.",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=".flashcard_cache",
+        help="The directory to cache flashcards.",
+    )
     args = parser.parse_args()
 
     if args.flashcards_only:
@@ -369,7 +382,12 @@ def main() -> None:
         return
 
     flashcards = create_flashcards(
-        words, args.batch_size, args.retries, args.model, args.verbose
+        words,
+        args.batch_size,
+        args.retries,
+        args.model,
+        args.verbose,
+        args.cache_dir,
     )
     save_flashcards(flashcards, args.output_path)
 

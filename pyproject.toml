@@ -8,8 +8,7 @@ version = "0.1.0"
 dependencies = [
     "ebooklib",
     "jieba",
-    "litellm",
-    "litellm[proxy]",
+    "google-generativeai",
     "pandas",
     "pytest",
     "beautifulsoup4",
