@@ -23,6 +23,16 @@ with open("src/system_prompt.toml", "r") as f:
     SYSTEM_PROMPT = prompt_data["system_prompt"]
     FEW_SHOT_EXAMPLES = prompt_data["examples"]
 
+EXPECTED_COLUMNS = [
+    "hanzi",
+    "pinyin",
+    "definition",
+    "partofspeech",
+    "sentencehanzi",
+    "sentencepinyin",
+    "sentencetranslation",
+]
+
 
 def read_epub(file_path: str) -> str:
     """
@@ -99,11 +109,11 @@ def extract_vocabulary(
 
 def create_flashcards(
     words: List[str],
+    cache_dir: str,
     batch_size: int = 100,
     retries: int = 3,
     model: str = "gemini-pro",
     verbose: bool = False,
-    cache_dir: str = ".flashcard_cache",
 ) -> pd.DataFrame:
     """
     Creates flashcards from a list of words with caching and retries.
@@ -265,16 +275,7 @@ def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
     bool
         True if the flashcard is valid, False otherwise.
     """
-    expected_columns = [
-        "hanzi",
-        "pinyin",
-        "definition",
-        "partofspeech",
-        "sentencehanzi",
-        "sentencepinyin",
-        "sentencetranslation",
-    ]
-    if not all(col in flashcard.index for col in expected_columns):
+    if not all(col in flashcard.index for col in EXPECTED_COLUMNS):
         return False
 
     if flashcard.isnull().any():
@@ -300,6 +301,8 @@ def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     file_path : str
         The path to save the flashcards to.
     """
+    if not flashcards.empty:
+        flashcards = flashcards[EXPECTED_COLUMNS]
     flashcards.to_csv(file_path, sep="\t", index=False, header=False)
 
 
@@ -362,7 +365,7 @@ def main() -> None:
     parser.add_argument(
         "--cache-dir",
         type=str,
-        default=".flashcard_cache",
+        required=True,
         help="The directory to cache flashcards.",
     )
     args = parser.parse_args()
@@ -383,11 +386,11 @@ def main() -> None:
 
     flashcards = create_flashcards(
         words,
+        args.cache_dir,
         args.batch_size,
         args.retries,
         args.model,
         args.verbose,
-        args.cache_dir,
     )
     save_flashcards(flashcards, args.output_path)
 

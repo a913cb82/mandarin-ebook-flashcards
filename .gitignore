@@ -2,3 +2,7 @@ __pycache__/
 .venv/
 .env
 .flashcard_cache/
+.cache-flash/
+.cache-pro/
+*.txt
+*.tsv

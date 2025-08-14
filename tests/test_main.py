@@ -266,7 +266,9 @@ def test_main_vocab_only(tmp_path) -> None:
     """
     epub_path = "tests/test_book.epub"
     output_path = tmp_path / "output.txt"
-    sys.argv = ["main.py", epub_path, str(output_path), "--vocab-only"]
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    sys.argv = ["main.py", epub_path, str(output_path), "--vocab-only", "--cache-dir", str(cache_dir)]
     main()
     assert os.path.exists(output_path)
     with open(output_path, "r") as f:
@@ -285,6 +287,8 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     vocab_path.write_text(vocab_content)
 
     output_path = tmp_path / "flashcards.txt"
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
     
     mock_flashcards = pd.DataFrame({
         "hanzi": ["你好", "世界"],
@@ -297,7 +301,7 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     })
     mock_create_flashcards.return_value = mock_flashcards
 
-    with patch("sys.argv", ["src/main.py", str(vocab_path), str(output_path), "--flashcards-only"]):
+    with patch("sys.argv", ["src/main.py", str(vocab_path), str(output_path), "--flashcards-only", "--cache-dir", str(cache_dir)]):
         main()
 
     assert os.path.exists(output_path)
