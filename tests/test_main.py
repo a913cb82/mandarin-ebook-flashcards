@@ -109,7 +109,7 @@ def test_validate_flashcard():
     )
 
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> None:
     """
     Tests the create_flashcards function with retry logic.
@@ -129,10 +129,9 @@ def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> N
 
     class MockResponse:
         def __init__(self, content):
-            self.choices = [MagicMock()]
-            self.choices[0].message.content = content
+            self.text = content
 
-    mock_completion.side_effect = [
+    mock_completion.return_value.generate_content.side_effect = [
         Exception("Invalid JSON"),
         MockResponse(
             json.dumps(valid_response_df.to_dict("records"))
@@ -144,10 +143,10 @@ def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> N
         words, batch_size=1, retries=2, cache_dir=str(tmp_path)
     )
     assert len(flashcards) == 1
-    assert mock_completion.call_count == 2
+    assert mock_completion.return_value.generate_content.call_count == 2
 
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_fails_after_retries(
     mock_completion: MagicMock,
     tmp_path,
@@ -155,17 +154,17 @@ def test_create_flashcards_fails_after_retries(
     """
     Tests that create_flashcards fails after all retries.
     """
-    mock_completion.side_effect = Exception("Invalid JSON")
+    mock_completion.return_value.generate_content.side_effect = Exception("Invalid JSON")
 
     words = ["你好"]
     flashcards = create_flashcards(
         words, batch_size=1, retries=3, cache_dir=str(tmp_path)
     )
     assert len(flashcards) == 0
-    assert mock_completion.call_count == 3  # 1 initial call + 2 retries
+    assert mock_completion.return_value.generate_content.call_count == 3  # 1 initial call + 2 retries
 
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) -> None:
     """
     Tests the caching mechanism in create_flashcards.
@@ -187,23 +186,22 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
 
     class MockResponse:
         def __init__(self, content):
-            self.choices = [MagicMock()]
-            self.choices[0].message.content = content
+            self.text = content
 
-    mock_completion.return_value = MockResponse(
+    mock_completion.return_value.generate_content.return_value = MockResponse(
         json.dumps(valid_response_df.to_dict("records"))
     )
 
     words = ["你好"]
     create_flashcards(words, batch_size=1, cache_dir=str(cache_dir))
-    assert mock_completion.call_count == 1
+    assert mock_completion.return_value.generate_content.call_count == 1
 
     # Run again and check that the cache is used
     create_flashcards(words, batch_size=1, cache_dir=str(cache_dir))
-    assert mock_completion.call_count == 1
+    assert mock_completion.return_value.generate_content.call_count == 1
 
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_preserves_order(
     mock_completion: MagicMock,
     tmp_path,
@@ -226,10 +224,9 @@ def test_create_flashcards_preserves_order(
 
     class MockResponse:
         def __init__(self, content):
-            self.choices = [MagicMock()]
-            self.choices[0].message.content = content
+            self.text = content
 
-    mock_completion.return_value = MockResponse(
+    mock_completion.return_value.generate_content.return_value = MockResponse(
         json.dumps(response_df.to_dict("records"))
     )
 
@@ -310,7 +307,7 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     assert result_df.iloc[0, 0] == "你好"
 
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_with_custom_model(
     mock_completion: MagicMock,
     tmp_path,
@@ -332,20 +329,20 @@ def test_create_flashcards_with_custom_model(
                 }
         ]
     )
-    mock_completion.return_value = mock_response
+    mock_completion.return_value.generate_content.return_value = mock_response
 
     words = ["你好"]
     create_flashcards(
         words, batch_size=1, model="custom-model", cache_dir=str(tmp_path)
     )
-    assert mock_completion.call_args[1]["model"] == "custom-model"
+    assert mock_completion.call_args[0][0] == "custom-model"
 
 
 import toml
 
-@patch("src.main.completion")
+@patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_uses_system_prompt_from_file(
-    mock_completion: MagicMock,
+    mock_generative_model: MagicMock,
     tmp_path,
 ) -> None:
     """
@@ -356,13 +353,13 @@ def test_create_flashcards_uses_system_prompt_from_file(
         expected_prompt = prompt_data["system_prompt"]
         few_shot_examples = prompt_data["examples"]
 
-    expected_messages = [{"role": "system", "content": expected_prompt}]
+    expected_messages = []
     for example in few_shot_examples:
-        expected_messages.append({"role": "user", "content": example["input"]})
-        expected_messages.append({"role": "assistant", "content": example["output"]})
+        expected_messages.append({"role": "user", "parts": [example["input"]]})
+        expected_messages.append({"role": "model", "parts": [example["output"]]})
 
     mock_response = MagicMock()
-    mock_response.choices[0].message.content = json.dumps(
+    mock_response.text = json.dumps(
         [
             {
                 "hanzi": "你好",
@@ -375,14 +372,18 @@ def test_create_flashcards_uses_system_prompt_from_file(
             }
         ]
     )
-    mock_completion.return_value = mock_response
+    mock_generative_model.return_value.generate_content.return_value = mock_response
 
     words = ["你好"]
     create_flashcards(words, batch_size=1, cache_dir=str(tmp_path))
-    
-    actual_messages = mock_completion.call_args[1]["messages"]
+
+    # Check that the system prompt is set correctly
+    assert mock_generative_model.call_args[1]["system_instruction"] == expected_prompt
+
+    # Check that the messages are in the correct format
+    actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
     assert actual_messages[:len(expected_messages)] == expected_messages
-    assert actual_messages[-1] == {"role": "user", "content": ",".join(words)}
+    assert actual_messages[-1] == {"role": "user", "parts": [",".join(words)]}
     
-    assert "response_format" in mock_completion.call_args[1]
-    assert mock_completion.call_args[1]["response_format"]["type"] == "json_schema"
+    assert mock_generative_model.call_args[1]["generation_config"]["response_mime_type"] == "application/json"
+    assert mock_generative_model.call_args[1]["generation_config"]["response_schema"]["type"] == "array"
