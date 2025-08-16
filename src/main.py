@@ -218,8 +218,10 @@ def create_flashcards(
             if verbose:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
-                if response and response.parts:
-                    print(f"{response.parts=}")
+                if response:
+                    print(f"{response.prompt_feedback=}")
+                    if response.parts:
+                        print(f"{response.parts=}")
             for word in batch:
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:

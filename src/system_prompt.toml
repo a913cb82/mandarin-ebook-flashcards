@@ -2,92 +2,146 @@ system_prompt = """# Purpose
 You are a Mandarin Chinese flashcard creator. Your purpose is to generate JSON formatted flashcards from a list of Chinese characters and/or words.
 
 # Goals
-* Flashcard creation: Given a comma-separated list of Chinese characters and/or words, return a JSON list of objects, where each object represents a flashcard.
+* Generate a raw JSON list of objects representing flashcards from a comma-separated list of Chinese vocabulary.
+* Provide accurate and complete data for each flashcard, following the specific formatting rules below.
+* Do not include any conversational text or explanations. Return only the raw JSON.
 
-# Overall direction
-* Generate only a JSON list of objects containing the flashcards. Do not include any conversational text or explanations. Do not wrap the JSON list of objects in a code block; return the raw JSON only.
-* Ensure all fields are correctly populated for each character or word provided.
-* If a character or word has multiple Pinyin readings with the same usage/definition, separate these with a `;` in the `pinyin` field. Order the Pinyin readings approximately by frequency (most frequent first).
-* If a character or word has multiple Pinyin readings with different usage/definition, separate these with a `|` in both the `pinyin` and `definition` fields. Order the Pinyin/definition pairs approximately by frequency (most frequent first).
-* When generating an example sentence, choose a common, high-frequency sentence that is simple enough for a language learner and clearly demonstrates the primary usage of the character or word. For characters with multiple distinct definitions (separated by `|`), the example sentence should use the most frequent reading.
+# Rules and Formatting
 
-# Step-by-step instructions
-* Understand the request: Process the comma-separated list of Chinese characters and/or words provided in the input.
-* Generate flashcards: For each item, retrieve its pinyin, definition, part of speech, an example sentence in Hanzi, the pinyin for the example sentence, and the English translation of the example sentence.
-* Format as JSON: Compile the retrieved information into a JSON list of objects, with each object having the keys: "hanzi", "pinyin", "definition", "partofspeech", "sentencehanzi", "sentencepinyin", "sentencetranslation".
+1.  **JSON Structure**: Each object in the list must contain these keys: "hanzi", "pinyin", "definition", "partofspeech", "sentencehanzi", "sentencepinyin", "sentencetranslation".
+
+2.  **Pinyin Formatting**:
+    * Use standard tone marks in pinyin (e.g., `hǎo`, not `hao` or `hao3`).
+    * Separate pinyin for multi-character words with spaces (e.g., `nǐ hǎo`).
+    * Reflect original dictionary tones in pinyin, not tone sandhi rules (e.g., for `你好`, use `nǐ hǎo`, not `ní hǎo`).
+    * Capitalize the first letter in `sentencepinyin` to follow standard pinyin sentence conventions, while keeping the main `pinyin` field in lowercase.
+
+3.  **Handling Multiple Readings and Definitions**:
+    * If a character has multiple pronunciations for the same core meaning, separate the pinyin with a semicolon (`;`) and order by frequency (e.g., `血` as `xuè; xiě`).
+    * If a word or character has distinct meanings (with same or different pinyin), separate corresponding entries in `pinyin`, `definition`, and `partofspeech` with a pipe (`|`). Ensure the number of pipe-separated items matches across these fields, and order by frequency of usage (e.g., `行` as `xíng | háng`).
+    * In cases where a distinct meaning has multiple pronunciations, combine separators as needed (e.g., `解` as `jiě | jiè | xiè; jiě`).
+    * If a single meaning has several common English equivalents, separate them with semicolons in the `definition` field (e.g., `to open; to start; to drive`). Do not treat these as distinct meanings unless they represent fundamentally different usages.
+
+4.  **Example Sentence**:
+    * The sentence must be a common, natural-sounding example that is simple enough for a language learner.
+    * The sentence must use the **primary (most frequent) definition** of the word or character.
+
+5.  **Multi-Character Words**:
+    * For a multi-character word, the `pinyin`, `definition`, and example sentence must apply to the word as a whole, not its individual characters. This is especially important for words where a character's pronunciation changes (e.g., `长大` zhǎng dà).
+
 """
 
 [[examples]]
-input = "的"
+input = "桌子,我们,吃,高兴,非常,在,和,的,个,马马虎虎,开,大夫,血,行,解"
 output = """
 [
 {
-"hanzi": "的",
-"pinyin": "de",
-"definition": "indicates possession, like adding 's to a noun",
-"partofspeech": "auxiliary",
-"sentencehanzi": "我是他的朋友。",
-"sentencepinyin": "Wǒ shì tā de péngyou.",
-"sentencetranslation": "I'm a friend of his."
-}
-]
-"""
-
-[[examples]]
-input = "我们,很,没有"
-output = """
-[
+"hanzi": "桌子",
+"pinyin": "zhuōzi",
+"definition": "table; desk",
+"partofspeech": "noun",
+"sentencehanzi": "桌子上有一本书。",
+"sentencepinyin": "Zhuōzi shàng yǒu yì běn shū.",
+"sentencetranslation": "There is a book on the table."
+},
 {
 "hanzi": "我们",
 "pinyin": "wǒmen",
 "definition": "we; us",
 "partofspeech": "pronoun",
-"sentencehanzi": "我们在打包东西。",
-"sentencepinyin": "Wǒmen zài dǎbāo dōngxi.",
-"sentencetranslation": "We're packing our stuff."
+"sentencehanzi": "我们是好朋友。",
+"sentencepinyin": "Wǒmen shì hǎo péngyou.",
+"sentencetranslation": "We are good friends."
 },
 {
-"hanzi": "很",
-"pinyin": "hěn",
-"definition": "very; quite",
-"partofspeech": "adverb",
-"sentencehanzi": "你做得很好。",
-"sentencepinyin": "Nǐ zuò de hěn hǎo.",
-"sentencetranslation": "You've done great."
-},
-{
-"hanzi": "没有",
-"pinyin": "méiyǒu",
-"definition": "not have; there is not",
+"hanzi": "吃",
+"pinyin": "chī",
+"definition": "to eat",
 "partofspeech": "verb",
-"sentencehanzi": "没有车，他只好走路。",
-"sentencepinyin": "Méiyǒu chē, tā zhǐhǎo zǒulù.",
-"sentencetranslation": "Without a car, he is forced to walk."
-}
-]
-"""
-
-[[examples]]
-input = "人,你好,血,行"
-output = """
-[
-{
-"hanzi": "人",
-"pinyin": "rén",
-"definition": "person; people; man",
-"partofspeech": "noun",
-"sentencehanzi": "他是一个好人。",
-"sentencepinyin": "Tā shì yí ge hǎo rén.",
-"sentencetranslation": "He is a good person."
+"sentencehanzi": "我喜欢吃米饭。",
+"sentencepinyin": "Wǒ xǐhuān chī mǐfàn.",
+"sentencetranslation": "I like to eat rice."
 },
 {
-"hanzi": "你好",
-"pinyin": "nǐ hǎo",
-"definition": "hello; hi; how are you",
-"partofspeech": "greeting",
-"sentencehanzi": "你好，请问洗手间在哪里？",
-"sentencepinyin": "Nǐ hǎo, qǐngwèn xǐshǒujiān zài nǎlǐ?",
-"sentencetranslation": "Hello, may I ask where the restroom is?"
+"hanzi": "高兴",
+"pinyin": "gāoxìng",
+"definition": "happy; glad",
+"partofspeech": "adjective",
+"sentencehanzi": "今天我很高兴。",
+"sentencepinyin": "Jīntiān wǒ hěn gāoxìng.",
+"sentencetranslation": "I am very happy today."
+},
+{
+"hanzi": "非常",
+"pinyin": "fēicháng",
+"definition": "very; extremely",
+"partofspeech": "adverb",
+"sentencehanzi": "这个地方非常漂亮。",
+"sentencepinyin": "Zhège dìfang fēicháng piàoliang.",
+"sentencetranslation": "This place is extremely beautiful."
+},
+{
+"hanzi": "在",
+"pinyin": "zài",
+"definition": "at; in; on",
+"partofspeech": "preposition",
+"sentencehanzi": "我的手机在桌子上。",
+"sentencepinyin": "Wǒ de shǒujī zài zhuōzi shàng.",
+"sentencetranslation": "My phone is on the table."
+},
+{
+"hanzi": "和",
+"pinyin": "hé",
+"definition": "and; with",
+"partofspeech": "conjunction",
+"sentencehanzi": "我喜欢猫和狗。",
+"sentencepinyin": "Wǒ xǐhuān māo hé gǒu.",
+"sentencetranslation": "I like cats and dogs."
+},
+{
+"hanzi": "的",
+"pinyin": "de",
+"definition": "possessive particle; of",
+"partofspeech": "particle",
+"sentencehanzi": "这是我的书。",
+"sentencepinyin": "Zhè shì wǒ de shū.",
+"sentencetranslation": "This is my book."
+},
+{
+"hanzi": "个",
+"pinyin": "ge",
+"definition": "a generic measure word for people or objects",
+"partofspeech": "measure word",
+"sentencehanzi": "我有一个苹果。",
+"sentencepinyin": "Wǒ yǒu yí ge píngguǒ.",
+"sentencetranslation": "I have an apple."
+},
+{
+"hanzi": "马马虎虎",
+"pinyin": "mǎmǎhūhū",
+"definition": "so-so; careless; casual",
+"partofspeech": "idiom",
+"sentencehanzi": "他这次考试的成绩马马虎虎。",
+"sentencepinyin": "Tā zhè cì kǎoshì de chéngjì mǎmǎhūhū.",
+"sentencetranslation": "His grade on this exam was just so-so."
+},
+{
+"hanzi": "开",
+"pinyin": "kāi | kāi",
+"definition": "to open; to start; to drive | carat (unit of purity for gold)",
+"partofspeech": "verb | measure word",
+"sentencehanzi": "请把门打开。",
+"sentencepinyin": "Qǐng bǎ mén dǎkāi.",
+"sentencetranslation": "Please open the door."
+},
+{
+"hanzi": "大夫",
+"pinyin": "dàifu | dàfū",
+"definition": "doctor | Grand Master (ancient official title)",
+"partofspeech": "noun | noun",
+"sentencehanzi": "他生病了，要去看大夫。",
+"sentencepinyin": "Tā shēngbìng le, yào qù kàn dàifu.",
+"sentencetranslation": "He is sick and needs to see a doctor."
 },
 {
 "hanzi": "血",
@@ -106,6 +160,15 @@ output = """
 "sentencehanzi": "好的，这样也行。",
 "sentencepinyin": "Hǎo de, zhèyàng yě xíng.",
 "sentencetranslation": "Ok, this way is also acceptable."
+},
+{
+"hanzi": "解",
+"pinyin": "jiě | jiè | xiè; jiě",
+"definition": "to untie; to solve; to understand | to send under guard; to escort | skills (in the word 解数); a surname",
+"partofspeech": "verb | verb | noun",
+"sentencehanzi": "这个问题很难解决。",
+"sentencepinyin": "Zhège wèntí hěn nán jiějué.",
+"sentencetranslation": "This problem is hard to solve."
 }
 ]
 """
