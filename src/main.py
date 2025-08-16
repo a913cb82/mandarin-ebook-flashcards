@@ -71,7 +71,7 @@ def extract_vocabulary(
     text : str
         The text to extract words from.
     stop_words_path : str, optional
-        The path to a file containing comma-separated stop words, by default None.
+        The path to a file containing newline-separated stop words, by default None.
     min_freq : int, optional
         The minimum frequency for a word to be included, by default 1.
     verbose : bool, optional
@@ -84,7 +84,7 @@ def extract_vocabulary(
     """
     if stop_words_path:
         with open(stop_words_path, "r") as f:
-            stop_words = set(f.read().split(','))
+            stop_words = set(f.read().splitlines())
     else:
         stop_words = set()
 
@@ -346,7 +346,7 @@ def main() -> None:
         "--stop-words",
         type=str,
         default=None,
-        help="The path to a file containing comma-separated stop words.",
+        help="The path to a file containing newline-separated stop words.",
     )
     parser.add_argument(
         "--min-frequency",

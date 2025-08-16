@@ -69,7 +69,7 @@ def test_extract_vocabulary_with_stop_words(tmp_path) -> None:
     text = "你好世界你好，我们"
     stop_words_path = tmp_path / "stop_words.txt"
     with open(stop_words_path, "w") as f:
-        f.write("你好,我们")
+        f.write("你好\n我们")
     words = extract_vocabulary(text, stop_words_path=str(stop_words_path))
     assert words == ["世界"]
 
