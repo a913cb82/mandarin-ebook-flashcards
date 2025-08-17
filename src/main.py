@@ -142,20 +142,20 @@ def create_flashcards(
     flashcards_map: Dict[str, pd.Series] = {}
     words_to_process = []
 
-    for word in words:
-        cache_path = os.path.join(cache_dir, f"{word}.json")
-        if os.path.exists(cache_path):
-            flashcards_map[word] = pd.read_json(cache_path, typ="series")
-        else:
-            words_to_process.append(word)
-
     pbar = (
         tqdm(total=len(words), desc="Creating flashcards")
         if verbose
         else None
     )
-    if pbar:
-        pbar.update(len(flashcards_map))
+
+    for word in words:
+        cache_path = os.path.join(cache_dir, f"{word}.json")
+        if os.path.exists(cache_path):
+            flashcards_map[word] = pd.read_json(cache_path, typ="series")
+            if pbar:
+                pbar.update(1)
+        else:
+            words_to_process.append(word)
 
     retry_counts = {word: 0 for word in words_to_process}
 
@@ -226,8 +226,9 @@ def create_flashcards(
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:
                     words_to_process.append(word)
-                elif verbose:
-                    print(f"Failed to create valid flashcard for word: {word}")
+                else:
+                    if verbose:
+                        print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
             continue
@@ -246,8 +247,9 @@ def create_flashcards(
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:
                     words_to_process.append(word)
-                elif verbose:
-                    print(f"Failed to create valid flashcard for word: {word}")
+                else:
+                    if verbose:
+                        print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
 
