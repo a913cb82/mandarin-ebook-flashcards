@@ -244,9 +244,9 @@ def test_save_flashcards(tmp_path) -> None:
             "pinyin": ["nǐ hǎo"],
             "definition": ["hello"],
             "partofspeech": ["greeting"],
-            "sentencehanzi": ["你好吗？"],
-            "sentencepinyin": ["Nǐ hǎo ma?"],
-            "sentencetranslation": ["How are you?"],
+            "sentencehanzi": "你好吗？",
+            "sentencepinyin": "Nǐ hǎo ma?",
+            "sentencetranslation": "How are you?",
         }
     )
     output_path = tmp_path / "flashcards.tsv"
@@ -391,3 +391,61 @@ def test_create_flashcards_uses_system_prompt_from_file(
     
     assert mock_generative_model.call_args[1]["generation_config"]["response_mime_type"] == "application/json"
     assert mock_generative_model.call_args[1]["generation_config"]["response_schema"]["type"] == "array"
+
+
+@patch("src.main.tqdm")
+@patch("google.generativeai.GenerativeModel")
+def test_create_flashcards_progress_bar(
+    mock_generative_model: MagicMock, mock_tqdm: MagicMock, tmp_path
+) -> None:
+    """
+    Tests that the progress bar is updated correctly in create_flashcards.
+    """
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    # Mock the response from the generative model
+    valid_response_df = pd.DataFrame(
+        {
+            "hanzi": ["世界"],
+            "pinyin": ["shì jiè"],
+            "definition": ["world"],
+            "partofspeech": ["noun"],
+            "sentencehanzi": ["你好世界"],
+            "sentencepinyin": ["Nǐ hǎo shì jiè"],
+            "sentencetranslation": ["Hello world"],
+        }
+    )
+
+    class MockResponse:
+        def __init__(self, content):
+            self.text = content
+
+    mock_generative_model.return_value.generate_content.return_value = MockResponse(
+        json.dumps(valid_response_df.to_dict("records"))
+    )
+
+    # Create a cached flashcard
+    cached_flashcard = pd.Series(
+        {
+            "hanzi": "你好",
+            "pinyin": "nǐ hǎo",
+            "definition": "hello",
+            "partofspeech": "greeting",
+            "sentencehanzi": "你好吗？",
+            "sentencepinyin": "Nǐ hǎo ma?",
+            "sentencetranslation": "How are you?",
+        }
+    )
+    cached_flashcard_path = cache_dir / "你好.json"
+    cached_flashcard.to_json(cached_flashcard_path)
+
+    words = ["你好", "世界"]
+    create_flashcards(words, batch_size=1, cache_dir=str(cache_dir), verbose=True)
+
+    # Check that tqdm was called
+    mock_tqdm.assert_called_once_with(total=len(words), desc="Creating flashcards")
+
+    # Check that the progress bar was updated for both the cached and non-cached word
+    mock_pbar = mock_tqdm.return_value
+    assert mock_pbar.update.call_count == 2
