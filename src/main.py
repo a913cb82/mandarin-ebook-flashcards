@@ -110,7 +110,8 @@ def extract_vocabulary(
 def create_flashcards(
     words: List[str],
     cache_dir: str,
-    batch_size: int = 100,
+    initial_batch_size: int = 100,
+    batch_size_multiplier: float = 2.0,
     retries: int = 3,
     model: str = "gemini-pro",
     verbose: bool = False,
@@ -122,8 +123,10 @@ def create_flashcards(
     ----------
     words : List[str]
         The list of words to create flashcards from.
-    batch_size : int, optional
-        The number of words to process in each batch, by default 100.
+    initial_batch_size : int, optional
+        The initial number of words to process in each batch, by default 100.
+    batch_size_multiplier : float, optional
+        The multiplier to use for adjusting the batch size, by default 2.0.
     retries : int, optional
         The number of times to retry a word if it fails validation, by default 3.
     model : str, optional
@@ -204,13 +207,15 @@ def create_flashcards(
         }
     )
 
+    batch_size = initial_batch_size
+
     while words_to_process:
         batch = words_to_process[:batch_size]
         words_to_process = words_to_process[batch_size:]
         response = None
 
         try:
-            response = llm_model.generate_content(messages + [{"role": "user", "parts": [",".join(batch)]}])
+            response = llm_model.generate_content(messages + [{"role": "user", "parts": [".".join(batch)]}])
             response_df = pd.DataFrame(
                 json.loads(response.text)
             )
@@ -231,12 +236,17 @@ def create_flashcards(
                         print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
+            batch_size = max(1, int(batch_size / batch_size_multiplier))
+            if verbose:
+                print(f"Batch failed, reducing batch size to {batch_size}")
             continue
 
         response_map = {row["hanzi"]: row for _, row in response_df.iterrows()}
-
+        
+        succeeded_count = 0
         for word in batch:
             if word in response_map and validate_flashcard(response_map[word], word):
+                succeeded_count += 1
                 flashcard = response_map[word]
                 flashcards_map[word] = flashcard
                 cache_path = os.path.join(cache_dir, f"{word}.json")
@@ -252,6 +262,11 @@ def create_flashcards(
                         print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
+        
+        if succeeded_count == len(batch):
+            batch_size = int(batch_size * batch_size_multiplier)
+            if verbose:
+                print(f"Batch succeeded, increasing batch size to {batch_size}")
 
     if pbar:
         pbar.close()
@@ -322,16 +337,22 @@ def main() -> None:
         "output_path", type=str, help="The path to save the flashcards."
     )
     parser.add_argument(
-        "--batch_size",
+        "--initial-batch-size",
         type=int,
         default=100,
-        help="The number of words to process in each batch.",
+        help="The initial number of words to process in each batch.",
+    )
+    parser.add_argument(
+        "--batch-size-multiplier",
+        type=float,
+        default=2.0,
+        help="The multiplier to use for adjusting the batch size.",
     )
     parser.add_argument(
         "--retries",
         type=int,
         default=3,
-        help="The number of times to retry a batch if it fails validation.",
+        help="The number of times to retry a flashcard if it fails validation.",
     )
     parser.add_argument(
         "--model",
@@ -391,7 +412,8 @@ def main() -> None:
     flashcards = create_flashcards(
         words,
         args.cache_dir,
-        args.batch_size,
+        args.initial_batch_size,
+        args.batch_size_multiplier,
         args.retries,
         args.model,
         args.verbose,
