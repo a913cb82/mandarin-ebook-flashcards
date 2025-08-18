@@ -109,21 +109,26 @@ def test_validate_flashcard():
     )
 
 
+@patch("src.main.validate_flashcard", side_effect=[False, False, True, True, True, True])
 @patch("google.generativeai.GenerativeModel")
-def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> None:
+def test_create_flashcards_dynamic_batch_size(
+    mock_completion: MagicMock,
+    mock_validate_flashcard: MagicMock,
+    tmp_path,
+) -> None:
     """
-    Tests the create_flashcards function with retry logic.
+    Tests that the batch size is adjusted dynamically.
     """
-    invalid_response_df = pd.DataFrame({"hanzi": ["你好"], "pinyin": [None]})
-    valid_response_df = pd.DataFrame(
+    words = ["你好", "世界", "我们", "他们"]
+    response_df = pd.DataFrame(
         {
-            "hanzi": ["你好"],
-            "pinyin": ["nǐ hǎo"],
-            "definition": ["hello"],
-            "partofspeech": ["greeting"],
-            "sentencehanzi": ["你好吗？"],
-            "sentencepinyin": ["Nǐ hǎo ma?"],
-            "sentencetranslation": ["How are you?"],
+            "hanzi": ["你好", "世界", "我们", "他们"],
+            "pinyin": ["nǐ hǎo", "shì jiè", "wǒ men", "tā men"],
+            "definition": ["hello", "world", "we", "they"],
+            "partofspeech": ["greeting", "noun", "pronoun", "pronoun"],
+            "sentencehanzi": ["你好吗？", "你好世界", "我们是朋友", "他们是学生"],
+            "sentencepinyin": ["Nǐ hǎo ma?", "Nǐ hǎo shì jiè", "Wǒmen shì péngyǒu", "Tāmen shì xuéshēng"],
+            "sentencetranslation": ["How are you?", "Hello world", "We are friends", "They are students"],
         }
     )
 
@@ -131,19 +136,20 @@ def test_create_flashcards_with_retry(mock_completion: MagicMock, tmp_path) -> N
         def __init__(self, content):
             self.text = content
 
-    mock_completion.return_value.generate_content.side_effect = [
-        Exception("Invalid JSON"),
-        MockResponse(
-            json.dumps(valid_response_df.to_dict("records"))
-        ),
-    ]
-
-    words = ["你好"]
-    flashcards = create_flashcards(
-        words, batch_size=1, retries=2, cache_dir=str(tmp_path)
+    mock_completion.return_value.generate_content.return_value = MockResponse(
+        json.dumps(response_df.to_dict("records"))
     )
-    assert len(flashcards) == 1
-    assert mock_completion.return_value.generate_content.call_count == 2
+
+    flashcards = create_flashcards(
+        words,
+        initial_batch_size=2,
+        batch_size_multiplier=2.0,
+        retries=2,
+        cache_dir=str(tmp_path),
+        verbose=True,
+    )
+    assert len(flashcards) == 4
+    assert mock_completion.return_value.generate_content.call_count == 3
 
 
 @patch("google.generativeai.GenerativeModel")
@@ -158,7 +164,7 @@ def test_create_flashcards_fails_after_retries(
 
     words = ["你好"]
     flashcards = create_flashcards(
-        words, batch_size=1, retries=3, cache_dir=str(tmp_path)
+        words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path)
     )
     assert len(flashcards) == 0
     assert mock_completion.return_value.generate_content.call_count == 3  # 1 initial call + 2 retries
@@ -193,11 +199,11 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
     )
 
     words = ["你好"]
-    create_flashcards(words, batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir))
     assert mock_completion.return_value.generate_content.call_count == 1
 
     # Run again and check that the cache is used
-    create_flashcards(words, batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir))
     assert mock_completion.return_value.generate_content.call_count == 1
 
 
@@ -230,7 +236,7 @@ def test_create_flashcards_preserves_order(
         json.dumps(response_df.to_dict("records"))
     )
 
-    flashcards = create_flashcards(words, batch_size=2, cache_dir=str(tmp_path))
+    flashcards = create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path))
     assert flashcards["hanzi"].tolist() == words
 
 
@@ -337,7 +343,7 @@ def test_create_flashcards_with_custom_model(
 
     words = ["你好"]
     create_flashcards(
-        words, batch_size=1, model="custom-model", cache_dir=str(tmp_path)
+        words, initial_batch_size=1, model="custom-model", cache_dir=str(tmp_path)
     )
     assert mock_completion.call_args[0][0] == "custom-model"
 
@@ -379,7 +385,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
     mock_generative_model.return_value.generate_content.return_value = mock_response
 
     words = ["你好"]
-    create_flashcards(words, batch_size=1, cache_dir=str(tmp_path))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(tmp_path))
 
     # Check that the system prompt is set correctly
     assert mock_generative_model.call_args[1]["system_instruction"] == expected_prompt
@@ -441,7 +447,7 @@ def test_create_flashcards_progress_bar(
     cached_flashcard.to_json(cached_flashcard_path)
 
     words = ["你好", "世界"]
-    create_flashcards(words, batch_size=1, cache_dir=str(cache_dir), verbose=True)
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir), verbose=True)
 
     # Check that tqdm was called
     mock_tqdm.assert_called_once_with(total=len(words), desc="Creating flashcards")
