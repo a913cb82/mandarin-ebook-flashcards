@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import toml
+import unicodedata
 from collections import Counter
 from io import StringIO
 from typing import Dict, List
@@ -26,6 +27,7 @@ with open("src/system_prompt.toml", "r") as f:
 EXPECTED_COLUMNS = [
     "hanzi",
     "pinyin",
+    "pinyinnumbered",
     "definition",
     "partofspeech",
     "sentencehanzi",
@@ -167,6 +169,7 @@ def create_flashcards(
         "properties": {
             "hanzi": {"type": "string"},
             "pinyin": {"type": "string"},
+            "pinyinnumbered": {"type": "string"},
             "definition": {"type": "string"},
             "partofspeech": {"type": "string"},
             "sentencehanzi": {"type": "string"},
@@ -176,6 +179,7 @@ def create_flashcards(
         "required": [
             "hanzi",
             "pinyin",
+            "pinyinnumbered",
             "definition",
             "partofspeech",
             "sentencehanzi",
@@ -215,7 +219,7 @@ def create_flashcards(
         response = None
 
         try:
-            response = llm_model.generate_content(messages + [{"role": "user", "parts": [".".join(batch)]}])
+            response = llm_model.generate_content(messages + [{"role": "user", "parts": ["..".join(batch)]}])
             response_df = pd.DataFrame(
                 json.loads(response.text)
             )
@@ -278,6 +282,60 @@ def create_flashcards(
     return pd.concat([card.to_frame().T for card in final_flashcards], ignore_index=True)
 
 
+def are_pinyins_consistent(tone_marked_pinyin: str, numbered_pinyin: str) -> bool:
+    """
+    Checks if the tone-marked pinyin and numbered pinyin are consistent.
+
+    Parameters
+    ----------
+    tone_marked_pinyin : str
+        The pinyin with tone marks.
+    numbered_pinyin : str
+        The pinyin with numbers.
+
+    Returns
+    -------
+    bool
+        True if the pinyins are consistent, False otherwise.
+    """
+
+    def convert_s(s: str) -> str:
+        s = unicodedata.normalize("NFD", s)
+        res = []
+        tone = "5"
+        for c in s:
+            if c == "ü":
+                res.append("v")
+            elif c == " ":
+                res.append(tone)
+                res.append(" ")
+                tone = "5"
+            elif c == "\u0304":
+                tone = "1"
+            elif c == "\u0301":
+                tone = "2"
+            elif c == "\u030c":
+                tone = "3"
+            elif c == "\u0300":
+                tone = "4"
+            elif not unicodedata.combining(c):
+                res.append(c)
+        res.append(tone)
+        return "".join(res)
+
+    tone_marked_parts = [p.strip() for p in tone_marked_pinyin.replace(";", "|").split("|")]
+    numbered_parts = [p.strip() for p in numbered_pinyin.replace(";", "|").split("|")]
+
+    if len(tone_marked_parts) != len(numbered_parts):
+        return False
+
+    for tm_part, n_part in zip(tone_marked_parts, numbered_parts):
+        if convert_s(tm_part) != n_part:
+            return False
+
+    return True
+
+
 def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
     """
     Validates a single flashcard.
@@ -305,6 +363,20 @@ def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
 
     if word not in flashcard["sentencehanzi"]:
         return False
+
+    if not are_pinyins_consistent(flashcard["pinyin"], flashcard["pinyinnumbered"]):
+        return False
+
+    pinyin_parts = flashcard["pinyin"].split("|")
+    pinyin_numbered_parts = flashcard["pinyinnumbered"].split("|")
+    definition_parts = flashcard["definition"].split("|")
+
+    if len(pinyin_parts) != len(pinyin_numbered_parts) or len(pinyin_parts) != len(definition_parts):
+        return False
+
+    for pinyin_part, pinyin_numbered_part in zip(pinyin_parts, pinyin_numbered_parts):
+        if len(pinyin_part.split(";")) != len(pinyin_numbered_part.split(";")):
+            return False
 
     return True
 

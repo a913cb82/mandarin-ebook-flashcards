@@ -8,26 +8,28 @@ You are a Mandarin Chinese flashcard creator. Your purpose is to generate JSON f
 
 # Rules and Formatting
 
-1.  **JSON Structure**: Each object in the list must contain these keys: "hanzi", "pinyin", "definition", "partofspeech", "sentencehanzi", "sentencepinyin", "sentencetranslation".
+1.  **JSON Structure**: Each object in the list must contain these keys: "hanzi", "pinyin", "pinyinnumbered", "definition", "partofspeech", "sentencehanzi", "sentencepinyin", "sentencetranslation".
 
 2.  **Pinyin Formatting**:
-    * Use standard tone marks in pinyin (e.g., `hǎo`, not `hao` or `hao3`).
-    * Separate pinyin for multi-character words with spaces (e.g., `nǐ hǎo`).
-    * Reflect original dictionary tones in pinyin, not tone sandhi rules (e.g., for `你好`, use `nǐ hǎo`, not `ní hǎo`).
-    * Capitalize the first letter in `sentencepinyin` to follow standard pinyin sentence conventions, while keeping the main `pinyin` field in lowercase.
+    *   **`pinyin`**: Use standard tone marks (e.g., `hǎo`).
+    *   **`pinyinnumbered`**: Use numbers 1-4 for tones and 5 for the neutral tone (e.g., `hao3`).
+    *   The `pinyin` and `pinyinnumbered` fields must be consistent. For example, if `pinyin` is `nǐ hǎo`, `pinyinnumbered` must be `ni3 hao3`.
+    *   Separate pinyin for multi-character words with spaces (e.g., `nǐ hǎo` and `ni3 hao3`).
+    *   Reflect original dictionary tones, not tone sandhi rules (e.g., for `你好`, use `nǐ hǎo`, not `ní hǎo`).
+    *   Capitalize the first letter in `sentencepinyin` to follow standard pinyin sentence conventions, while keeping the main `pinyin` and `pinyinnumbered` fields in lowercase.
 
 3.  **Handling Multiple Readings and Definitions**:
-    * If a character has multiple pronunciations for the same core meaning, separate the pinyin with a semicolon (`;`) and order by frequency (e.g., `血` as `xuè; xiě`).
-    * If a word or character has distinct meanings (with same or different pinyin), separate corresponding entries in `pinyin`, `definition`, and `partofspeech` with a pipe (`|`). Ensure the number of pipe-separated items matches across these fields, and order by frequency of usage (e.g., `行` as `xíng | háng`).
-    * In cases where a distinct meaning has multiple pronunciations, combine separators as needed (e.g., `解` as `jiě | jiè | xiè; jiě`).
-    * If a single meaning has several common English equivalents, separate them with semicolons in the `definition` field (e.g., `to open; to start; to drive`). Do not treat these as distinct meanings unless they represent fundamentally different usages.
+    *   If a character has multiple pronunciations for the same core meaning, separate the pinyin with a semicolon (`;`) in both `pinyin` and `pinyinnumbered` fields, and order by frequency (e.g., `pinyin` as `xuè; xiě` and `pinyinnumbered` as `xue4; xie3`).
+    *   If a word or character has distinct meanings, separate corresponding entries in `pinyin`, `pinyinnumbered`, `definition`, and `partofspeech` with a pipe (`|`). Ensure the number of pipe-separated items matches across these fields, and order by frequency of usage (e.g., `pinyin` as `xíng | háng` and `pinyinnumbered` as `xing2 | hang2`).
+    *   In cases where a distinct meaning has multiple pronunciations, combine separators as needed (e.g., `pinyin` as `jiě | jiè | xiè; jiě` and `pinyinnumbered` as `jie3 | jie4 | xie4; jie3`).
+    *   If a single meaning has several common English equivalents, separate them with semicolons in the `definition` field (e.g., `to open; to start; to drive`).
 
 4.  **Example Sentence**:
-    * The sentence must be a common, natural-sounding example that is simple enough for a language learner.
-    * The sentence must use the **primary (most frequent) definition** of the word or character.
+    *   The sentence must be a common, natural-sounding example that is simple enough for a language learner.
+    *   The sentence must use the **primary (most frequent) definition** of the word or character.
 
 5.  **Multi-Character Words**:
-    * For a multi-character word, the `pinyin`, `definition`, and example sentence must apply to the word as a whole, not its individual characters. This is especially important for words where a character's pronunciation changes (e.g., `长大` zhǎng dà).
+    *   For a multi-character word, the `pinyin`, `pinyinnumbered`, `definition`, and example sentence must apply to the word as a whole, not its individual characters. This is especially important for words where a character's pronunciation changes (e.g., `长大` with `pinyin` as `zhǎng dà` and `pinyinnumbered` as `zhang3 da4`).
 
 """
 
@@ -38,6 +40,7 @@ output = """
 {
 "hanzi": "桌子",
 "pinyin": "zhuōzi",
+"pinyinnumbered": "zhuo1zi5",
 "definition": "table; desk",
 "partofspeech": "noun",
 "sentencehanzi": "桌子上有一本书。",
@@ -47,6 +50,7 @@ output = """
 {
 "hanzi": "我们",
 "pinyin": "wǒmen",
+"pinyinnumbered": "wo3men5",
 "definition": "we; us",
 "partofspeech": "pronoun",
 "sentencehanzi": "我们是好朋友。",
@@ -56,6 +60,7 @@ output = """
 {
 "hanzi": "吃",
 "pinyin": "chī",
+"pinyinnumbered": "chi1",
 "definition": "to eat",
 "partofspeech": "verb",
 "sentencehanzi": "我喜欢吃米饭。",
@@ -65,6 +70,7 @@ output = """
 {
 "hanzi": "高兴",
 "pinyin": "gāoxìng",
+"pinyinnumbered": "gao1xing4",
 "definition": "happy; glad",
 "partofspeech": "adjective",
 "sentencehanzi": "今天我很高兴。",
@@ -74,6 +80,7 @@ output = """
 {
 "hanzi": "非常",
 "pinyin": "fēicháng",
+"pinyinnumbered": "fei1chang2",
 "definition": "very; extremely",
 "partofspeech": "adverb",
 "sentencehanzi": "这个地方非常漂亮。",
@@ -83,6 +90,7 @@ output = """
 {
 "hanzi": "在",
 "pinyin": "zài",
+"pinyinnumbered": "zai4",
 "definition": "at; in; on",
 "partofspeech": "preposition",
 "sentencehanzi": "我的手机在桌子上。",
@@ -92,6 +100,7 @@ output = """
 {
 "hanzi": "和",
 "pinyin": "hé",
+"pinyinnumbered": "he2",
 "definition": "and; with",
 "partofspeech": "conjunction",
 "sentencehanzi": "我喜欢猫和狗。",
@@ -101,6 +110,7 @@ output = """
 {
 "hanzi": "的",
 "pinyin": "de",
+"pinyinnumbered": "de5",
 "definition": "possessive particle; of",
 "partofspeech": "particle",
 "sentencehanzi": "这是我的书。",
@@ -110,6 +120,7 @@ output = """
 {
 "hanzi": "个",
 "pinyin": "ge",
+"pinyinnumbered": "ge5",
 "definition": "a generic measure word for people or objects",
 "partofspeech": "measure word",
 "sentencehanzi": "我有一个苹果。",
@@ -119,6 +130,7 @@ output = """
 {
 "hanzi": "马马虎虎",
 "pinyin": "mǎmǎhūhū",
+"pinyinnumbered": "ma3ma3hu1hu1",
 "definition": "so-so; careless; casual",
 "partofspeech": "idiom",
 "sentencehanzi": "他这次考试的成绩马马虎虎。",
@@ -128,6 +140,7 @@ output = """
 {
 "hanzi": "开",
 "pinyin": "kāi | kāi",
+"pinyinnumbered": "kai1 | kai1",
 "definition": "to open; to start; to drive | carat (unit of purity for gold)",
 "partofspeech": "verb | measure word",
 "sentencehanzi": "请把门打开。",
@@ -137,6 +150,7 @@ output = """
 {
 "hanzi": "大夫",
 "pinyin": "dàifu | dàfū",
+"pinyinnumbered": "dai4fu5 | da4fu1",
 "definition": "doctor | Grand Master (ancient official title)",
 "partofspeech": "noun | noun",
 "sentencehanzi": "他生病了，要去看大夫。",
@@ -146,6 +160,7 @@ output = """
 {
 "hanzi": "血",
 "pinyin": "xuè; xiě",
+"pinyinnumbered": "xue4; xie3",
 "definition": "blood",
 "partofspeech": "noun",
 "sentencehanzi": "医生在给病人输血。",
@@ -155,6 +170,7 @@ output = """
 {
 "hanzi": "行",
 "pinyin": "xíng | háng",
+"pinyinnumbered": "xing2 | hang2",
 "definition": "to walk; to go; capable; ok | a row; a line; profession",
 "partofspeech": "verb | noun",
 "sentencehanzi": "好的，这样也行。",
@@ -164,11 +180,69 @@ output = """
 {
 "hanzi": "解",
 "pinyin": "jiě | jiè | xiè; jiě",
+"pinyinnumbered": "jie3 | jie4 | xie4; jie3",
 "definition": "to untie; to solve; to understand | to send under guard; to escort | skills (in the word 解数); a surname",
 "partofspeech": "verb | verb | noun",
 "sentencehanzi": "这个问题很难解决。",
 "sentencepinyin": "Zhège wèntí hěn nán jiějué.",
 "sentencetranslation": "This problem is hard to solve."
+}
+]
+"""
+
+[[examples]]
+input = "周文王,之战,之滨,王,习近平"
+output = """
+[
+{
+"hanzi": "周文王",
+"pinyin": "zhōu wén wáng",
+"pinyinnumbered": "zhou1 wen2 wang2",
+"definition": "King Wen of Zhou, a virtuous king who laid the foundations for the Zhou Dynasty.",
+"partofspeech": "noun",
+"sentencehanzi": "周文王是周朝的奠基人。",
+"sentencepinyin": "Zhōu Wén Wáng shì Zhōu cháo de diànjīrén.",
+"sentencetranslation": "King Wen of Zhou was the founder of the Zhou Dynasty."
+},
+{
+"hanzi": "之战",
+"pinyin": "zhī zhàn",
+"pinyinnumbered": "zhi1 zhan4",
+"definition": "of battle; used to connect a preceding noun (often a place or name) to the word 'battle', indicating a specific battle.",
+"partofspeech": "phrase",
+"sentencehanzi": "牧野之战是历史上有名的战役。",
+"sentencepinyin": "Mùyě zhī zhàn shì lìshǐ shàng yǒumíng de zhànyì.",
+"sentencetranslation": "The Battle of Muye is a famous battle in history."
+},
+{
+"hanzi": "之滨",
+"pinyin": "zhī bīn",
+"pinyinnumbered": "zhi1 bin1",
+"definition": "of the bank/shore; used to connect a preceding noun (often a body of water) to the word 'bank' or 'shore'.",
+"partofspeech": "phrase",
+"sentencehanzi": "他们在渭水之滨散步。",
+"sentencepinyin": "Tāmen zài Wèishuǐ zhī bīn sànbù.",
+"sentencetranslation": "They are walking on the bank of the Wei River."
+},
+{
+"hanzi": "王",
+"pinyin": "wáng | wàng",
+"pinyinnumbered": "wang2 | wang4",
+"definition": "king; a surname | to rule; to govern",
+"partofspeech": "noun | verb",
+"sentencehanzi": "他是我们的王。",
+"sentencepinyin": "Tā shì wǒmen de wáng.",
+"sentencetranslation": "He is our king."
+},
+{
+"hanzi": "习近平",
+"pinyin": "xí jìn píng",
+"pinyinnumbered": "xi2 jin4 ping2",
+"definition": "Xi Jinping, a Chinese politician.",
+"partofspeech": "noun",
+"sentencehanzi": "习近平是中国的国家主席。",
+"sentencepinyin": "Xí Jìnpíng shì Zhōngguó de guójiā zhǔxí.",
+"sentencetranslation": "Xi Jinping is the president of China."
 }
 ]
 """

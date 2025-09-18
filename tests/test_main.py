@@ -82,6 +82,7 @@ def test_validate_flashcard():
         {
             "hanzi": "你好",
             "pinyin": "nǐ hǎo",
+            "pinyinnumbered": "ni3 hao3",
             "definition": "hello",
             "partofspeech": "greeting",
             "sentencehanzi": "你好吗？",
@@ -109,6 +110,41 @@ def test_validate_flashcard():
     )
 
 
+def test_validate_flashcard_extended():
+    """
+    Tests the extended validation logic in validate_flashcard.
+    """
+    base_flashcard = {
+        "hanzi": "行",
+        "pinyin": "xíng | háng",
+        "pinyinnumbered": "xing2 | hang2",
+        "definition": "to walk; to go | a row; a line",
+        "partofspeech": "verb | noun",
+        "sentencehanzi": "好的，这样也行。",
+        "sentencepinyin": "Hǎo de, zhèyàng yě xíng.",
+        "sentencetranslation": "Ok, this way is also acceptable.",
+    }
+
+    # Valid flashcard
+    valid_flashcard = pd.Series(base_flashcard)
+    assert validate_flashcard(valid_flashcard, "行") is True
+
+    # Invalid: pinyin and pinyinnumbered have different number of pipe-separated parts
+    invalid_flashcard = pd.Series(base_flashcard.copy())
+    invalid_flashcard["pinyinnumbered"] = "xing2"
+    assert validate_flashcard(invalid_flashcard, "行") is False
+
+    # Invalid: pinyin and definition have different number of pipe-separated parts
+    invalid_flashcard = pd.Series(base_flashcard.copy())
+    invalid_flashcard["definition"] = "to walk; to go"
+    assert validate_flashcard(invalid_flashcard, "行") is False
+
+    # Invalid: pinyin and pinyinnumbered have different number of semicolon-separated parts
+    invalid_flashcard = pd.Series(base_flashcard.copy())
+    invalid_flashcard["pinyin"] = "xíng; xing2 | háng"
+    assert validate_flashcard(invalid_flashcard, "行") is False
+
+
 @patch("src.main.validate_flashcard", side_effect=[False, False, True, True, True, True])
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_dynamic_batch_size(
@@ -124,6 +160,7 @@ def test_create_flashcards_dynamic_batch_size(
         {
             "hanzi": ["你好", "世界", "我们", "他们"],
             "pinyin": ["nǐ hǎo", "shì jiè", "wǒ men", "tā men"],
+            "pinyinnumbered": ["ni3 hao3", "shi4 jie4", "wo3 men5", "ta1 men5"],
             "definition": ["hello", "world", "we", "they"],
             "partofspeech": ["greeting", "noun", "pronoun", "pronoun"],
             "sentencehanzi": ["你好吗？", "你好世界", "我们是朋友", "他们是学生"],
@@ -167,7 +204,7 @@ def test_create_flashcards_fails_after_retries(
         words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path)
     )
     assert len(flashcards) == 0
-    assert mock_completion.return_value.generate_content.call_count == 3  # 1 initial call + 2 retries
+    assert mock_completion.return_value.generate_content.call_count == 3
 
 
 @patch("google.generativeai.GenerativeModel")
@@ -182,6 +219,7 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
         {
             "hanzi": ["你好"],
             "pinyin": ["nǐ hǎo"],
+            "pinyinnumbered": ["ni3 hao3"],
             "definition": ["hello"],
             "partofspeech": ["greeting"],
             "sentencehanzi": ["你好吗？"],
@@ -220,6 +258,7 @@ def test_create_flashcards_preserves_order(
         {
             "hanzi": ["你好", "世界"],
             "pinyin": ["nǐ hǎo", "shì jiè"],
+            "pinyinnumbered": ["ni3 hao3", "shi4 jie4"],
             "definition": ["hello", "world"],
             "partofspeech": ["greeting", "noun"],
             "sentencehanzi": ["你好吗？", "你好世界"],
@@ -248,6 +287,7 @@ def test_save_flashcards(tmp_path) -> None:
         {
             "hanzi": ["你好"],
             "pinyin": ["nǐ hǎo"],
+            "pinyinnumbered": ["ni3 hao3"],
             "definition": ["hello"],
             "partofspeech": ["greeting"],
             "sentencehanzi": "你好吗？",
@@ -262,7 +302,7 @@ def test_save_flashcards(tmp_path) -> None:
         content = f.read()
         assert (
             content.strip()
-            == "你好\tnǐ hǎo\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+            == "你好\tnǐ hǎo\tni3 hao3\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
         )
 
 
@@ -299,6 +339,7 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     mock_flashcards = pd.DataFrame({
         "hanzi": ["你好", "世界"],
         "pinyin": ["nǐ hǎo", "shì jiè"],
+        "pinyinnumbered": ["ni3 hao3", "shi4 jie4"],
         "definition": ["hello", "world"],
         "partofspeech": ["interjection", "noun"],
         "sentencehanzi": ["你好，世界", "你好，世界"],
@@ -331,6 +372,7 @@ def test_create_flashcards_with_custom_model(
                 {
                     "hanzi": "你好",
                     "pinyin": "nǐ hǎo",
+                    "pinyinnumbered": "ni3 hao3",
                     "definition": "hello",
                     "partofspeech": "greeting",
                     "sentencehanzi": "你好吗？",
@@ -374,6 +416,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
             {
                 "hanzi": "你好",
                 "pinyin": "nǐ hǎo",
+                "pinyinnumbered": "ni3 hao3",
                 "definition": "hello",
                 "partofspeech": "greeting",
                 "sentencehanzi": "你好吗？",
@@ -415,6 +458,7 @@ def test_create_flashcards_progress_bar(
         {
             "hanzi": ["世界"],
             "pinyin": ["shì jiè"],
+            "pinyinnumbered": ["shi4 jie4"],
             "definition": ["world"],
             "partofspeech": ["noun"],
             "sentencehanzi": ["你好世界"],
@@ -436,6 +480,7 @@ def test_create_flashcards_progress_bar(
         {
             "hanzi": "你好",
             "pinyin": "nǐ hǎo",
+            "pinyinnumbered": "ni3 hao3",
             "definition": "hello",
             "partofspeech": "greeting",
             "sentencehanzi": "你好吗？",
