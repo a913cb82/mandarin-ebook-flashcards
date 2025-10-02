@@ -14,8 +14,9 @@ You are a Mandarin Chinese flashcard creator. Your purpose is to generate JSON f
     *   **`pinyin`**: Use standard tone marks (e.g., `hǎo`).
     *   **`pinyinnumbered`**: Use numbers 1-4 for tones and 5 for the neutral tone (e.g., `hao3`).
     *   The `pinyin` and `pinyinnumbered` fields must be consistent. For example, if `pinyin` is `nǐ hǎo`, `pinyinnumbered` must be `ni3 hao3`.
-    *   Separate pinyin for multi-character words with spaces (e.g., `nǐ hǎo` and `ni3 hao3`).
-    *   Reflect original dictionary tones, not tone sandhi rules (e.g., for `你好`, use `nǐ hǎo`, not `ní hǎo`).
+    *   Separate every pinyin syllable with a space (e.g., `nǐ hǎo` and `ni3 hao3`).
+    *   Remove apostrophes used to separate syllables (e.g., `xī'ān` should be `xī ān`).
+    *   Reflect tone sandhi rules in the `pinyin` and `pinyinnumbered` fields (e.g., for `你好`, use `ní hǎo`, not `nǐ hǎo`).
     *   Capitalize the first letter in `sentencepinyin` to follow standard pinyin sentence conventions, while keeping the main `pinyin` and `pinyinnumbered` fields in lowercase.
 
 3.  **Handling Multiple Readings and Definitions**:
@@ -39,22 +40,22 @@ output = """
 [
 {
 "hanzi": "桌子",
-"pinyin": "zhuōzi",
-"pinyinnumbered": "zhuo1zi5",
+"pinyin": "zhuō zi",
+"pinyinnumbered": "zhuo1 zi5",
 "definition": "table; desk",
 "partofspeech": "noun",
 "sentencehanzi": "桌子上有一本书。",
-"sentencepinyin": "Zhuōzi shàng yǒu yì běn shū.",
+"sentencepinyin": "Zhuō zi shàng yǒu yì běn shū.",
 "sentencetranslation": "There is a book on the table."
 },
 {
 "hanzi": "我们",
-"pinyin": "wǒmen",
-"pinyinnumbered": "wo3men5",
+"pinyin": "wǒ men",
+"pinyinnumbered": "wo3 men5",
 "definition": "we; us",
 "partofspeech": "pronoun",
 "sentencehanzi": "我们是好朋友。",
-"sentencepinyin": "Wǒmen shì hǎo péngyou.",
+"sentencepinyin": "Wǒ men shì hǎo péng you.",
 "sentencetranslation": "We are good friends."
 },
 {
@@ -64,27 +65,27 @@ output = """
 "definition": "to eat",
 "partofspeech": "verb",
 "sentencehanzi": "我喜欢吃米饭。",
-"sentencepinyin": "Wǒ xǐhuān chī mǐfàn.",
+"sentencepinyin": "Wǒ xǐ huān chī mǐ fàn.",
 "sentencetranslation": "I like to eat rice."
 },
 {
 "hanzi": "高兴",
-"pinyin": "gāoxìng",
-"pinyinnumbered": "gao1xing4",
+"pinyin": "gāo xìng",
+"pinyinnumbered": "gao1 xing4",
 "definition": "happy; glad",
 "partofspeech": "adjective",
 "sentencehanzi": "今天我很高兴。",
-"sentencepinyin": "Jīntiān wǒ hěn gāoxìng.",
+"sentencepinyin": "Jīn tiān wó hěn gāo xìng.",
 "sentencetranslation": "I am very happy today."
 },
 {
 "hanzi": "非常",
-"pinyin": "fēicháng",
-"pinyinnumbered": "fei1chang2",
+"pinyin": "fēi cháng",
+"pinyinnumbered": "fei1 chang2",
 "definition": "very; extremely",
 "partofspeech": "adverb",
 "sentencehanzi": "这个地方非常漂亮。",
-"sentencepinyin": "Zhège dìfang fēicháng piàoliang.",
+"sentencepinyin": "Zhè ge dì fang fēi cháng piào liang.",
 "sentencetranslation": "This place is extremely beautiful."
 },
 {
@@ -94,7 +95,7 @@ output = """
 "definition": "at; in; on",
 "partofspeech": "preposition",
 "sentencehanzi": "我的手机在桌子上。",
-"sentencepinyin": "Wǒ de shǒujī zài zhuōzi shàng.",
+"sentencepinyin": "Wǒ de shǒu jī zài zhuō zi shàng.",
 "sentencetranslation": "My phone is on the table."
 },
 {
@@ -104,7 +105,7 @@ output = """
 "definition": "and; with",
 "partofspeech": "conjunction",
 "sentencehanzi": "我喜欢猫和狗。",
-"sentencepinyin": "Wǒ xǐhuān māo hé gǒu.",
+"sentencepinyin": "Wǒ xǐ huān māo hé gǒu.",
 "sentencetranslation": "I like cats and dogs."
 },
 {
@@ -124,17 +125,17 @@ output = """
 "definition": "a generic measure word for people or objects",
 "partofspeech": "measure word",
 "sentencehanzi": "我有一个苹果。",
-"sentencepinyin": "Wǒ yǒu yí ge píngguǒ.",
+"sentencepinyin": "Wǒ yǒu yí ge píng guǒ.",
 "sentencetranslation": "I have an apple."
 },
 {
 "hanzi": "马马虎虎",
-"pinyin": "mǎmǎhūhū",
-"pinyinnumbered": "ma3ma3hu1hu1",
+"pinyin": "mǎ mǎ hū hū",
+"pinyinnumbered": "ma3 ma3 hu1 hu1",
 "definition": "so-so; careless; casual",
 "partofspeech": "idiom",
 "sentencehanzi": "他这次考试的成绩马马虎虎。",
-"sentencepinyin": "Tā zhè cì kǎoshì de chéngjì mǎmǎhūhū.",
+"sentencepinyin": "Tā zhè cì kǎo shì de chéng jì mǎ mǎ hū hū.",
 "sentencetranslation": "His grade on this exam was just so-so."
 },
 {
@@ -144,17 +145,17 @@ output = """
 "definition": "to open; to start; to drive | carat (unit of purity for gold)",
 "partofspeech": "verb | measure word",
 "sentencehanzi": "请把门打开。",
-"sentencepinyin": "Qǐng bǎ mén dǎkāi.",
+"sentencepinyin": "Qǐng bǎ mén dǎ kāi.",
 "sentencetranslation": "Please open the door."
 },
 {
 "hanzi": "大夫",
-"pinyin": "dàifu | dàfū",
-"pinyinnumbered": "dai4fu5 | da4fu1",
+"pinyin": "dài fu | dà fū",
+"pinyinnumbered": "dai4 fu5 | da4 fu1",
 "definition": "doctor | Grand Master (ancient official title)",
 "partofspeech": "noun | noun",
 "sentencehanzi": "他生病了，要去看大夫。",
-"sentencepinyin": "Tā shēngbìng le, yào qù kàn dàifu.",
+"sentencepinyin": "Tā shēng bìng le, yào qù kàn dài fu.",
 "sentencetranslation": "He is sick and needs to see a doctor."
 },
 {
@@ -164,7 +165,7 @@ output = """
 "definition": "blood",
 "partofspeech": "noun",
 "sentencehanzi": "医生在给病人输血。",
-"sentencepinyin": "Yīshēng zài gěi bìngrén shūxuè.",
+"sentencepinyin": "Yī shēng zài gěi bìng rén shū xuè.",
 "sentencetranslation": "The doctor is giving the patient a blood transfusion."
 },
 {
@@ -174,7 +175,7 @@ output = """
 "definition": "to walk; to go; capable; ok | a row; a line; profession",
 "partofspeech": "verb | noun",
 "sentencehanzi": "好的，这样也行。",
-"sentencepinyin": "Hǎo de, zhèyàng yě xíng.",
+"sentencepinyin": "Hǎo de, zhè yàng yě xíng.",
 "sentencetranslation": "Ok, this way is also acceptable."
 },
 {
@@ -184,7 +185,7 @@ output = """
 "definition": "to untie; to solve; to understand | to send under guard; to escort | skills (in the word 解数); a surname",
 "partofspeech": "verb | verb | noun",
 "sentencehanzi": "这个问题很难解决。",
-"sentencepinyin": "Zhège wèntí hěn nán jiějué.",
+"sentencepinyin": "Zhè ge wèn tí hěn nán jiě jué.",
 "sentencetranslation": "This problem is hard to solve."
 }
 ]
@@ -201,7 +202,7 @@ output = """
 "definition": "King Wen of Zhou, a virtuous king who laid the foundations for the Zhou Dynasty.",
 "partofspeech": "noun",
 "sentencehanzi": "周文王是周朝的奠基人。",
-"sentencepinyin": "Zhōu Wén Wáng shì Zhōu cháo de diànjīrén.",
+"sentencepinyin": "Zhōu Wén Wáng shì Zhōu cháo de diàn jī rén.",
 "sentencetranslation": "King Wen of Zhou was the founder of the Zhou Dynasty."
 },
 {
@@ -211,7 +212,7 @@ output = """
 "definition": "of battle; used to connect a preceding noun (often a place or name) to the word 'battle', indicating a specific battle.",
 "partofspeech": "phrase",
 "sentencehanzi": "牧野之战是历史上有名的战役。",
-"sentencepinyin": "Mùyě zhī zhàn shì lìshǐ shàng yǒumíng de zhànyì.",
+"sentencepinyin": "Mù yě zhī zhàn shì lì shǐ shàng yǒu míng de zhàn yì.",
 "sentencetranslation": "The Battle of Muye is a famous battle in history."
 },
 {
@@ -221,7 +222,7 @@ output = """
 "definition": "of the bank/shore; used to connect a preceding noun (often a body of water) to the word 'bank' or 'shore'.",
 "partofspeech": "phrase",
 "sentencehanzi": "他们在渭水之滨散步。",
-"sentencepinyin": "Tāmen zài Wèishuǐ zhī bīn sànbù.",
+"sentencepinyin": "Tā men zài Wèi shuǐ zhī bīn sàn bù.",
 "sentencetranslation": "They are walking on the bank of the Wei River."
 },
 {
@@ -231,7 +232,7 @@ output = """
 "definition": "king; a surname | to rule; to govern",
 "partofspeech": "noun | verb",
 "sentencehanzi": "他是我们的王。",
-"sentencepinyin": "Tā shì wǒmen de wáng.",
+"sentencepinyin": "Tā shì wǒ men de wáng.",
 "sentencetranslation": "He is our king."
 },
 {
@@ -241,7 +242,7 @@ output = """
 "definition": "Xi Jinping, a Chinese politician.",
 "partofspeech": "noun",
 "sentencehanzi": "习近平是中国的国家主席。",
-"sentencepinyin": "Xí Jìnpíng shì Zhōngguó de guójiā zhǔxí.",
+"sentencepinyin": "Xí Jìn píng shì Zhōng guó de guó jiā zhǔ xí.",
 "sentencetranslation": "Xi Jinping is the president of China."
 }
 ]
