@@ -14,6 +14,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
 import google.generativeai as genai
+import google.generativeai.caching as gencache
 from tqdm import tqdm
 
 load_dotenv()
@@ -62,7 +63,7 @@ def extract_vocabulary(
     text: str,
     stop_words_path: str = None,
     min_freq: int = 1,
-    verbose: bool = False,
+    verbose: int = 0,
 ) -> List[str]:
     """
     Extracts words from a string of text, filters them, and returns a list of words
@@ -101,7 +102,7 @@ def extract_vocabulary(
     words = [word for word in words if is_all_chinese(word)]
     word_counts = Counter(words)
 
-    if verbose:
+    if verbose > 0:
         for i in range(1, min_freq + 1):
             vocab_size = len([word for word, count in word_counts.items() if count >= i])
             print(f"Vocabulary size with min_freq={i}: {vocab_size}")
@@ -116,7 +117,8 @@ def create_flashcards(
     batch_size_multiplier: float = 2.0,
     retries: int = 3,
     model: str = "gemini-pro",
-    verbose: bool = False,
+    verbose: int = 0,
+    cache_tokens: bool = False,
 ) -> pd.DataFrame:
     """
     Creates flashcards from a list of words with caching and retries.
@@ -149,7 +151,7 @@ def create_flashcards(
 
     pbar = (
         tqdm(total=len(words), desc="Creating flashcards")
-        if verbose
+        if verbose > 0
         else None
     )
 
@@ -211,6 +213,12 @@ def create_flashcards(
         }
     )
 
+    if cache_tokens:
+        cached_content = gencache.CachedContent.create(
+            model=model,
+            contents=messages,
+        )
+
     batch_size = initial_batch_size
 
     while words_to_process:
@@ -219,12 +227,16 @@ def create_flashcards(
         response = None
 
         try:
-            response = llm_model.generate_content(messages + [{"role": "user", "parts": ["..".join(batch)]}])
-            response_df = pd.DataFrame(
-                json.loads(response.text)
-            )
+            if cache_tokens:
+                response = llm_model.generate_content(
+                    contents=[{"role": "user", "parts": ["..".join(batch)]}],
+                    cached_content=cached_content,
+                )
+            else:
+                response = llm_model.generate_content(messages + [{"role": "user", "parts": ["..".join(batch)]}])
+            response_df = pd.DataFrame(json.loads(response.text))
         except Exception as e:
-            if verbose:
+            if verbose > 0:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
                 if response:
@@ -236,12 +248,12 @@ def create_flashcards(
                 if retry_counts[word] < retries:
                     words_to_process.append(word)
                 else:
-                    if verbose:
+                    if verbose > 0:
                         print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
             batch_size = max(1, int(batch_size / batch_size_multiplier))
-            if verbose:
+            if verbose > 0:
                 print(f"Batch failed, reducing batch size to {batch_size}")
             continue
 
@@ -249,7 +261,9 @@ def create_flashcards(
         
         succeeded_count = 0
         for word in batch:
-            if word in response_map and validate_flashcard(response_map[word], word):
+            if word in response_map and validate_flashcard(
+                response_map[word], word, verbose=verbose
+            ):
                 succeeded_count += 1
                 flashcard = response_map[word]
                 flashcards_map[word] = flashcard
@@ -262,14 +276,14 @@ def create_flashcards(
                 if retry_counts[word] < retries:
                     words_to_process.append(word)
                 else:
-                    if verbose:
+                    if verbose > 0:
                         print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
         
         if succeeded_count == len(batch):
             batch_size = int(batch_size * batch_size_multiplier)
-            if verbose:
+            if verbose > 0:
                 print(f"Batch succeeded, increasing batch size to {batch_size}")
 
     if pbar:
@@ -336,7 +350,7 @@ def are_pinyins_consistent(tone_marked_pinyin: str, numbered_pinyin: str) -> boo
     return True
 
 
-def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
+def validate_flashcard(flashcard: pd.Series, word: str, verbose: int = 0) -> bool:
     """
     Validates a single flashcard.
 
@@ -353,18 +367,28 @@ def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
         True if the flashcard is valid, False otherwise.
     """
     if not all(col in flashcard.index for col in EXPECTED_COLUMNS):
+        if verbose > 1:
+            print(f"Flashcard for '{word}' is missing columns.")
         return False
 
     if flashcard.isnull().any():
+        if verbose > 1:
+            print(f"Flashcard for '{word}' has null values.")
         return False
 
     if flashcard["hanzi"] != word:
+        if verbose > 1:
+            print(f"Flashcard for '{word}' has mismatched hanzi: {flashcard['hanzi']}")
         return False
 
     if word not in flashcard["sentencehanzi"]:
+        if verbose > 1:
+            print(f"Word '{word}' not in sentence: {flashcard['sentencehanzi']}")
         return False
 
     if not are_pinyins_consistent(flashcard["pinyin"], flashcard["pinyinnumbered"]):
+        if verbose > 1:
+            print(f"Pinyins for '{word}' are inconsistent: {flashcard['pinyin']} vs {flashcard['pinyinnumbered']}")
         return False
 
     pinyin_parts = flashcard["pinyin"].split("|")
@@ -372,10 +396,14 @@ def validate_flashcard(flashcard: pd.Series, word: str) -> bool:
     definition_parts = flashcard["definition"].split("|")
 
     if len(pinyin_parts) != len(pinyin_numbered_parts) or len(pinyin_parts) != len(definition_parts):
+        if verbose > 1:
+            print(f"Inconsistent number of parts for '{word}': pinyin={len(pinyin_parts)}, numbered={len(pinyin_numbered_parts)}, definition={len(definition_parts)}")
         return False
 
     for pinyin_part, pinyin_numbered_part in zip(pinyin_parts, pinyin_numbered_parts):
         if len(pinyin_part.split(";")) != len(pinyin_numbered_part.split(";")):
+            if verbose > 1:
+                print(f"Inconsistent number of sub-parts for '{word}': {pinyin_part} vs {pinyin_numbered_part}")
             return False
 
     return True
@@ -451,8 +479,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--verbose",
-        action="store_true",
-        help="Print verbose output.",
+        type=int,
+        default=0,
+        help="Set the verbosity level (0, 1, or 2).",
     )
     parser.add_argument(
         "--flashcards-only",
@@ -464,6 +493,11 @@ def main() -> None:
         type=str,
         required=True,
         help="The directory to cache flashcards.",
+    )
+    parser.add_argument(
+        "--cache-tokens",
+        action="store_true",
+        help="Enable token caching.",
     )
     args = parser.parse_args()
 
@@ -489,6 +523,7 @@ def main() -> None:
         args.retries,
         args.model,
         args.verbose,
+        args.cache_tokens,
     )
     save_flashcards(flashcards, args.output_path)
 

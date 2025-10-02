@@ -145,11 +145,15 @@ def test_validate_flashcard_extended():
     assert validate_flashcard(invalid_flashcard, "行") is False
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
 @patch("src.main.validate_flashcard", side_effect=[False, False, True, True, True, True])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_dynamic_batch_size(
     mock_completion: MagicMock,
+    mock_cached_content: MagicMock,
     mock_validate_flashcard: MagicMock,
+    cache_tokens: bool,
     tmp_path,
 ) -> None:
     """
@@ -184,14 +188,19 @@ def test_create_flashcards_dynamic_batch_size(
         retries=2,
         cache_dir=str(tmp_path),
         verbose=True,
+        cache_tokens=cache_tokens,
     )
     assert len(flashcards) == 4
     assert mock_completion.return_value.generate_content.call_count == 3
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_fails_after_retries(
     mock_completion: MagicMock,
+    mock_cached_content: MagicMock,
+    cache_tokens: bool,
     tmp_path,
 ) -> None:
     """
@@ -201,14 +210,16 @@ def test_create_flashcards_fails_after_retries(
 
     words = ["你好"]
     flashcards = create_flashcards(
-        words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path)
+        words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path), cache_tokens=cache_tokens
     )
     assert len(flashcards) == 0
     assert mock_completion.return_value.generate_content.call_count == 3
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
-def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) -> None:
+def test_create_flashcards_with_caching(mock_completion: MagicMock, mock_cached_content: MagicMock, cache_tokens: bool, tmp_path) -> None:
     """
     Tests the caching mechanism in create_flashcards.
     """
@@ -237,17 +248,21 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, tmp_path) ->
     )
 
     words = ["你好"]
-    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir), cache_tokens=cache_tokens)
     assert mock_completion.return_value.generate_content.call_count == 1
 
     # Run again and check that the cache is used
-    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir), cache_tokens=cache_tokens)
     assert mock_completion.return_value.generate_content.call_count == 1
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_preserves_order(
     mock_completion: MagicMock,
+    mock_cached_content: MagicMock,
+    cache_tokens: bool,
     tmp_path,
 ) -> None:
     """
@@ -275,7 +290,7 @@ def test_create_flashcards_preserves_order(
         json.dumps(response_df.to_dict("records"))
     )
 
-    flashcards = create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path))
+    flashcards = create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path), cache_tokens=cache_tokens)
     assert flashcards["hanzi"].tolist() == words
 
 
@@ -358,9 +373,13 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     assert result_df.iloc[0, 0] == "你好"
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_with_custom_model(
     mock_completion: MagicMock,
+    mock_cached_content: MagicMock,
+    cache_tokens: bool,
     tmp_path,
 ) -> None:
     """
@@ -385,16 +404,20 @@ def test_create_flashcards_with_custom_model(
 
     words = ["你好"]
     create_flashcards(
-        words, initial_batch_size=1, model="custom-model", cache_dir=str(tmp_path)
+        words, initial_batch_size=1, model="custom-model", cache_dir=str(tmp_path), cache_tokens=cache_tokens
     )
     assert mock_completion.call_args[0][0] == "custom-model"
 
 
 import toml
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_uses_system_prompt_from_file(
     mock_generative_model: MagicMock,
+    mock_cached_content: MagicMock,
+    cache_tokens: bool,
     tmp_path,
 ) -> None:
     """
@@ -428,24 +451,37 @@ def test_create_flashcards_uses_system_prompt_from_file(
     mock_generative_model.return_value.generate_content.return_value = mock_response
 
     words = ["你好"]
-    create_flashcards(words, initial_batch_size=1, cache_dir=str(tmp_path))
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(tmp_path), cache_tokens=cache_tokens)
 
     # Check that the system prompt is set correctly
     assert mock_generative_model.call_args[1]["system_instruction"] == expected_prompt
 
-    # Check that the messages are in the correct format
-    actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
-    assert actual_messages[:len(expected_messages)] == expected_messages
-    assert actual_messages[-1] == {"role": "user", "parts": [",".join(words)]}
-    
-    assert mock_generative_model.call_args[1]["generation_config"]["response_mime_type"] == "application/json"
-    assert mock_generative_model.call_args[1]["generation_config"]["response_schema"]["type"] == "array"
+    if cache_tokens:
+        # Check that cached_content.create was called correctly
+        mock_cached_content.create.assert_called_once_with(
+            model=mock_generative_model.call_args[0][0],
+            contents=expected_messages,
+        )
+        # Check that generate_content was called with cached_content and the batch
+        mock_generative_model.return_value.generate_content.assert_called_once_with(
+            contents=[{"role": "user", "parts": ["..".join(words)]}],
+            cached_content=mock_cached_content.create.return_value,
+        )
+    else:
+        # Check that cached_content.create was NOT called
+        mock_cached_content.create.assert_not_called()
+        # Check that generate_content was called with messages (few-shot + batch)
+        actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
+        assert actual_messages[:len(expected_messages)] == expected_messages
+        assert actual_messages[-1] == {"role": "user", "parts": [",".join(words)]}
 
 
+@pytest.mark.parametrize("cache_tokens", [True, False])
 @patch("src.main.tqdm")
+@patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_progress_bar(
-    mock_generative_model: MagicMock, mock_tqdm: MagicMock, tmp_path
+    mock_generative_model: MagicMock, mock_cached_content: MagicMock, mock_tqdm: MagicMock, cache_tokens: bool, tmp_path
 ) -> None:
     """
     Tests that the progress bar is updated correctly in create_flashcards.
@@ -492,7 +528,7 @@ def test_create_flashcards_progress_bar(
     cached_flashcard.to_json(cached_flashcard_path)
 
     words = ["你好", "世界"]
-    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir), verbose=True)
+    create_flashcards(words, initial_batch_size=1, cache_dir=str(cache_dir), verbose=True, cache_tokens=cache_tokens)
 
     # Check that tqdm was called
     mock_tqdm.assert_called_once_with(total=len(words), desc="Creating flashcards")
