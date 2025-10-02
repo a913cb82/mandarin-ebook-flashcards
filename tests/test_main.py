@@ -81,8 +81,8 @@ def test_validate_flashcard():
     valid_flashcard = pd.Series(
         {
             "hanzi": "你好",
-            "pinyin": "nǐ hǎo",
-            "pinyinnumbered": "ni3 hao3",
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
             "definition": "hello",
             "partofspeech": "greeting",
             "sentencehanzi": "你好吗？",
@@ -163,8 +163,8 @@ def test_create_flashcards_dynamic_batch_size(
     response_df = pd.DataFrame(
         {
             "hanzi": ["你好", "世界", "我们", "他们"],
-            "pinyin": ["nǐ hǎo", "shì jiè", "wǒ men", "tā men"],
-            "pinyinnumbered": ["ni3 hao3", "shi4 jie4", "wo3 men5", "ta1 men5"],
+            "pinyin": ["ní hǎo", "shì jiè", "wǒ men", "tā men"],
+            "pinyinnumbered": ["ni2 hao3", "shi4 jie4", "wo3 men5", "ta1 men5"],
             "definition": ["hello", "world", "we", "they"],
             "partofspeech": ["greeting", "noun", "pronoun", "pronoun"],
             "sentencehanzi": ["你好吗？", "你好世界", "我们是朋友", "他们是学生"],
@@ -229,8 +229,8 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, mock_cached_
     valid_response_df = pd.DataFrame(
         {
             "hanzi": ["你好"],
-            "pinyin": ["nǐ hǎo"],
-            "pinyinnumbered": ["ni3 hao3"],
+            "pinyin": ["ní hǎo"],
+            "pinyinnumbered": ["ni2 hao3"],
             "definition": ["hello"],
             "partofspeech": ["greeting"],
             "sentencehanzi": ["你好吗？"],
@@ -238,7 +238,6 @@ def test_create_flashcards_with_caching(mock_completion: MagicMock, mock_cached_
             "sentencetranslation": ["How are you?"],
         }
     )
-
     class MockResponse:
         def __init__(self, content):
             self.text = content
@@ -272,8 +271,8 @@ def test_create_flashcards_preserves_order(
     response_df = pd.DataFrame(
         {
             "hanzi": ["你好", "世界"],
-            "pinyin": ["nǐ hǎo", "shì jiè"],
-            "pinyinnumbered": ["ni3 hao3", "shi4 jie4"],
+            "pinyin": ["ní hǎo", "shì jiè"],
+            "pinyinnumbered": ["ni2 hao3", "shi4 jie4"],
             "definition": ["hello", "world"],
             "partofspeech": ["greeting", "noun"],
             "sentencehanzi": ["你好吗？", "你好世界"],
@@ -301,8 +300,8 @@ def test_save_flashcards(tmp_path) -> None:
     flashcards = pd.DataFrame(
         {
             "hanzi": ["你好"],
-            "pinyin": ["nǐ hǎo"],
-            "pinyinnumbered": ["ni3 hao3"],
+            "pinyin": ["ní hǎo"],
+            "pinyinnumbered": ["ni2 hao3"],
             "definition": ["hello"],
             "partofspeech": ["greeting"],
             "sentencehanzi": "你好吗？",
@@ -317,7 +316,7 @@ def test_save_flashcards(tmp_path) -> None:
         content = f.read()
         assert (
             content.strip()
-            == "你好\tnǐ hǎo\tni3 hao3\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
+            == "你好\tní hǎo\tni2 hao3\thello\tgreeting\t你好吗？\tNǐ hǎo ma?\tHow are you?"
         )
 
 
@@ -353,8 +352,8 @@ def test_flashcards_only(mock_create_flashcards, tmp_path):
     
     mock_flashcards = pd.DataFrame({
         "hanzi": ["你好", "世界"],
-        "pinyin": ["nǐ hǎo", "shì jiè"],
-        "pinyinnumbered": ["ni3 hao3", "shi4 jie4"],
+        "pinyin": ["ní hǎo", "shì jiè"],
+        "pinyinnumbered": ["ni2 hao3", "shi4 jie4"],
         "definition": ["hello", "world"],
         "partofspeech": ["interjection", "noun"],
         "sentencehanzi": ["你好，世界", "你好，世界"],
@@ -390,8 +389,8 @@ def test_create_flashcards_with_custom_model(
         [
                 {
                     "hanzi": "你好",
-                    "pinyin": "nǐ hǎo",
-                    "pinyinnumbered": "ni3 hao3",
+                    "pinyin": "ní hǎo",
+                    "pinyinnumbered": "ni2 hao3",
                     "definition": "hello",
                     "partofspeech": "greeting",
                     "sentencehanzi": "你好吗？",
@@ -438,8 +437,8 @@ def test_create_flashcards_uses_system_prompt_from_file(
         [
             {
                 "hanzi": "你好",
-                "pinyin": "nǐ hǎo",
-                "pinyinnumbered": "ni3 hao3",
+                "pinyin": "ní hǎo",
+                "pinyinnumbered": "ni2 hao3",
                 "definition": "hello",
                 "partofspeech": "greeting",
                 "sentencehanzi": "你好吗？",
@@ -474,6 +473,23 @@ def test_create_flashcards_uses_system_prompt_from_file(
         actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
         assert actual_messages[:len(expected_messages)] == expected_messages
         assert actual_messages[-1] == {"role": "user", "parts": [",".join(words)]}
+
+
+import toml
+
+def test_system_prompt_examples():
+    """
+    Tests that the examples in the system prompt are valid.
+    """
+    with open("src/system_prompt.toml", "r") as f:
+        prompt_data = toml.load(f)
+        examples = prompt_data["examples"]
+
+    for example in examples:
+        flashcards = json.loads(example["output"])
+        for flashcard_dict in flashcards:
+            flashcard = pd.Series(flashcard_dict)
+            assert validate_flashcard(flashcard, flashcard["hanzi"]) is True
 
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
@@ -515,8 +531,8 @@ def test_create_flashcards_progress_bar(
     cached_flashcard = pd.Series(
         {
             "hanzi": "你好",
-            "pinyin": "nǐ hǎo",
-            "pinyinnumbered": "ni3 hao3",
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
             "definition": "hello",
             "partofspeech": "greeting",
             "sentencehanzi": "你好吗？",

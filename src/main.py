@@ -337,7 +337,7 @@ def are_pinyins_consistent(tone_marked_pinyin: str, numbered_pinyin: str) -> boo
         res.append(tone)
         return "".join(res)
 
-    tone_marked_parts = [p.strip() for p in tone_marked_pinyin.replace(";", "|").split("|")]
+    tone_marked_parts = [p.strip().replace("'", "") for p in tone_marked_pinyin.replace(";", "|").split("|")]
     numbered_parts = [p.strip() for p in numbered_pinyin.replace(";", "|").split("|")]
 
     if len(tone_marked_parts) != len(numbered_parts):
