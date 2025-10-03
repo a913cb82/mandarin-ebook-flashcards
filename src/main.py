@@ -159,9 +159,15 @@ def create_flashcards(
     for word in words:
         cache_path = os.path.join(cache_dir, f"{word}.json")
         if os.path.exists(cache_path):
-            flashcards_map[word] = pd.read_json(cache_path, typ="series")
-            if pbar:
-                pbar.update(1)
+            cached_card = pd.read_json(cache_path, typ="series")
+            if validate_flashcard(cached_card, word, verbose=verbose):
+                flashcards_map[word] = cached_card
+                if pbar:
+                    pbar.update(1)
+            else:
+                if verbose > 1:
+                    print(f"Cached card for '{word}' failed validation.")
+                words_to_process.append(word)
         else:
             words_to_process.append(word)
 
@@ -324,19 +330,16 @@ def convertPinyin(s):
 
 
 def are_pinyins_consistent(tone_marked_pinyin: str, numbered_pinyin: str) -> bool:
-    print(f"are_pinyins_consistent input: {tone_marked_pinyin}, {numbered_pinyin}")
     tone_marked_pinyin = tone_marked_pinyin.replace(";", "|")
     numbered_pinyin = numbered_pinyin.replace(";", "|")
     tone_marked_parts = [p.strip().replace("'", "") for p in tone_marked_pinyin.split("|")]
     numbered_parts = [p.strip() for p in numbered_pinyin.split("|")]
-    print(f"are_pinyins_consistent parts: {tone_marked_parts}, {numbered_parts}")
 
     if len(tone_marked_parts) != len(numbered_parts):
         return False
 
     for tm_part, n_part in zip(tone_marked_parts, numbered_parts):
         converted_n_part = convertPinyin(n_part)
-        print(f"are_pinyins_consistent comparing: {tm_part} vs {converted_n_part}")
         if tm_part != converted_n_part:
             return False
 
@@ -401,6 +404,11 @@ def validate_flashcard(flashcard: pd.Series, word: str, verbose: int = 0) -> boo
     if not are_pipe_counts_equal(flashcard["pinyin"], flashcard["definition"]):
         if verbose > 1:
             print(f"Inconsistent number of parts for '{word}' between pinyin and definition")
+        return False
+
+    if not are_pipe_counts_equal(flashcard["pinyin"], flashcard["partofspeech"]):
+        if verbose > 1:
+            print(f"Inconsistent number of parts for '{word}' between pinyin and partofspeech")
         return False
 
     return True

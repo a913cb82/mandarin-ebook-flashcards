@@ -162,6 +162,11 @@ def test_validate_flashcard_extended():
     invalid_flashcard["pinyin"] = "xíng; xing2 | háng"
     assert validate_flashcard(invalid_flashcard, "行") is False
 
+    # Invalid: pinyin and partofspeech have different number of pipe-separated parts
+    invalid_flashcard = pd.Series(base_flashcard.copy())
+    invalid_flashcard["partofspeech"] = "verb"
+    assert validate_flashcard(invalid_flashcard, "行") is False
+
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
 @patch("src.main.validate_flashcard", side_effect=[False, False, True, True, True, True])
@@ -481,7 +486,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
         )
         # Check that generate_content was called with cached_content and the batch
         mock_generative_model.return_value.generate_content.assert_called_once_with(
-            contents=[{"role": "user", "parts": ["..".join(words)]}],
+            contents=[{"role": "user", "parts": ["..\n".join(words)]}],
             cached_content=mock_cached_content.create.return_value,
         )
     else:
@@ -490,7 +495,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
         # Check that generate_content was called with messages (few-shot + batch)
         actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
         assert actual_messages[:len(expected_messages)] == expected_messages
-        assert actual_messages[-1] == {"role": "user", "parts": ["..".join(words)]}
+        assert actual_messages[-1] == {"role": "user", "parts": ["..\n".join(words)]}
 
 
 import toml
@@ -616,3 +621,53 @@ def test_are_pipe_counts_equal():
     # Semicolons should be ignored
     assert are_pipe_counts_equal("a;b|c", "d|e;f") is True
     assert are_pipe_counts_equal("a;b", "c;d") is True
+
+
+@patch("builtins.print")
+@patch("google.generativeai.GenerativeModel")
+def test_create_flashcards_with_invalid_cache(mock_generative_model, mock_print, tmp_path):
+    """
+    Tests that create_flashcards re-generates a card if the cached version is invalid.
+    """
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    # Create an invalid cached flashcard
+    invalid_cached_card = pd.Series({
+        "hanzi": "你好",
+        "pinyin": "ní hǎo",
+        "pinyinnumbered": "ni2 hao3",
+        "definition": "hello",
+        # Missing partofspeech
+    })
+    cached_flashcard_path = cache_dir / "你好.json"
+    invalid_cached_card.to_json(cached_flashcard_path)
+
+    # Mock the response from the generative model for the re-generation
+    valid_response_df = pd.DataFrame([{
+        "hanzi": "你好",
+        "pinyin": "ní hǎo",
+        "pinyinnumbered": "ni2 hao3",
+        "definition": "hello",
+        "partofspeech": "greeting",
+        "sentencehanzi": "你好吗？",
+        "sentencepinyin": "Nǐ hǎo ma?",
+        "sentencetranslation": "How are you?",
+    }])
+    
+    class MockResponse:
+        def __init__(self, content):
+            self.text = content
+            
+    mock_generative_model.return_value.generate_content.return_value = MockResponse(
+        json.dumps(valid_response_df.to_dict("records"))
+    )
+
+    words = ["你好"]
+    create_flashcards(words, cache_dir=str(cache_dir), verbose=2)
+
+    # Check that the LLM was called, because the cached card was invalid
+    mock_generative_model.return_value.generate_content.assert_called_once()
+    
+    # Check that the warning was printed
+    mock_print.assert_any_call("Cached card for '你好' failed validation.")
