@@ -1,9 +1,10 @@
 import argparse
 import json
 import os
+import re
 import toml
 import unicodedata
-from collections import Counter
+from collections import Counter, OrderedDict
 from io import StringIO
 from typing import Dict, List
 
@@ -296,58 +297,59 @@ def create_flashcards(
     return pd.concat([card.to_frame().T for card in final_flashcards], ignore_index=True)
 
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+pinyinToneMarks = {
+    'a': 'āáǎà', 'e': 'ēéěè', 'i': 'īíǐì',
+    'o': 'ōóǒò', 'u': 'ūúǔù', 'ü': 'ǖǘǚǜ',
+    'A': 'ĀÁǍÀ', 'E': 'ĒÉĚÈ', 'I': 'ĪÍǏÌ',
+    'O': 'ŌÓǑÒ', 'U': 'ŪÚǓÙ', 'Ü': 'ǕǗǙǛ'
+}
+
+def convertPinyinCallback(m):
+    tone=int(m.group(3))%5
+    r=m.group(1).replace('v', 'ü').replace('V', 'Ü')
+    # for multple vowels, use first one if it is a/e/o, otherwise use second one
+    pos=0
+    if len(r)>1 and not r[0] in 'aeoAEO':
+        pos=1
+    if tone != 0:
+        r=r[0:pos]+pinyinToneMarks[r[pos]][tone-1]+r[pos+1:]
+    return r+m.group(2)
+
+def convertPinyin(s):
+    return re.sub(r'([aeiouüvÜ]{1,3})(n?g?r?)([012345])', convertPinyinCallback, s, flags=re.IGNORECASE)
+
+
 def are_pinyins_consistent(tone_marked_pinyin: str, numbered_pinyin: str) -> bool:
-    """
-    Checks if the tone-marked pinyin and numbered pinyin are consistent.
-
-    Parameters
-    ----------
-    tone_marked_pinyin : str
-        The pinyin with tone marks.
-    numbered_pinyin : str
-        The pinyin with numbers.
-
-    Returns
-    -------
-    bool
-        True if the pinyins are consistent, False otherwise.
-    """
-
-    def convert_s(s: str) -> str:
-        s = unicodedata.normalize("NFD", s)
-        res = []
-        tone = "5"
-        for c in s:
-            if c == "ü":
-                res.append("v")
-            elif c == " ":
-                res.append(tone)
-                res.append(" ")
-                tone = "5"
-            elif c == "\u0304":
-                tone = "1"
-            elif c == "\u0301":
-                tone = "2"
-            elif c == "\u030c":
-                tone = "3"
-            elif c == "\u0300":
-                tone = "4"
-            elif not unicodedata.combining(c):
-                res.append(c)
-        res.append(tone)
-        return "".join(res)
-
-    tone_marked_parts = [p.strip().replace("'", "") for p in tone_marked_pinyin.replace(";", "|").split("|")]
-    numbered_parts = [p.strip() for p in numbered_pinyin.replace(";", "|").split("|")]
+    print(f"are_pinyins_consistent input: {tone_marked_pinyin}, {numbered_pinyin}")
+    tone_marked_pinyin = tone_marked_pinyin.replace(";", "|")
+    numbered_pinyin = numbered_pinyin.replace(";", "|")
+    tone_marked_parts = [p.strip().replace("'", "") for p in tone_marked_pinyin.split("|")]
+    numbered_parts = [p.strip() for p in numbered_pinyin.split("|")]
+    print(f"are_pinyins_consistent parts: {tone_marked_parts}, {numbered_parts}")
 
     if len(tone_marked_parts) != len(numbered_parts):
         return False
 
     for tm_part, n_part in zip(tone_marked_parts, numbered_parts):
-        if convert_s(tm_part) != n_part:
+        converted_n_part = convertPinyin(n_part)
+        print(f"are_pinyins_consistent comparing: {tm_part} vs {converted_n_part}")
+        if tm_part != converted_n_part:
             return False
 
     return True
+
+
+def are_structures_identical(str1: str, str2: str) -> bool:
+    def get_structure(s: str) -> List[int]:
+        return [len(part.split(';')) for part in s.split('|')]
+    return get_structure(str1) == get_structure(str2)
+
+def are_pipe_counts_equal(str1: str, str2: str) -> bool:
+    return len(str1.split('|')) == len(str2.split('|'))
 
 
 def validate_flashcard(flashcard: pd.Series, word: str, verbose: int = 0) -> bool:
@@ -391,20 +393,15 @@ def validate_flashcard(flashcard: pd.Series, word: str, verbose: int = 0) -> boo
             print(f"Pinyins for '{word}' are inconsistent: {flashcard['pinyin']} vs {flashcard['pinyinnumbered']}")
         return False
 
-    pinyin_parts = flashcard["pinyin"].split("|")
-    pinyin_numbered_parts = flashcard["pinyinnumbered"].split("|")
-    definition_parts = flashcard["definition"].split("|")
-
-    if len(pinyin_parts) != len(pinyin_numbered_parts) or len(pinyin_parts) != len(definition_parts):
+    if not are_structures_identical(flashcard["pinyin"], flashcard["pinyinnumbered"]):
         if verbose > 1:
-            print(f"Inconsistent number of parts for '{word}': pinyin={len(pinyin_parts)}, numbered={len(pinyin_numbered_parts)}, definition={len(definition_parts)}")
+            print(f"Inconsistent separator structures for '{word}' between pinyin and pinyinnumbered")
         return False
-
-    for pinyin_part, pinyin_numbered_part in zip(pinyin_parts, pinyin_numbered_parts):
-        if len(pinyin_part.split(";")) != len(pinyin_numbered_part.split(";")):
-            if verbose > 1:
-                print(f"Inconsistent number of sub-parts for '{word}': {pinyin_part} vs {pinyin_numbered_part}")
-            return False
+        
+    if not are_pipe_counts_equal(flashcard["pinyin"], flashcard["definition"]):
+        if verbose > 1:
+            print(f"Inconsistent number of parts for '{word}' between pinyin and definition")
+        return False
 
     return True
 

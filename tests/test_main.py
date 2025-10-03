@@ -110,6 +110,24 @@ def test_validate_flashcard():
     )
 
 
+def test_validate_flashcard_nu_er():
+    """
+    Tests the validate_flashcard function for the word '女儿'.
+    """
+    flashcard = pd.Series({
+        "hanzi": "女儿",
+        "pinyin": "nǚ ér",
+        "pinyinnumbered": "nv3 er2",
+        "definition": "daughter",
+        "partofspeech": "noun",
+        "sentencehanzi": "这是我的女儿。",
+        "sentencepinyin": "Zhè shì wǒ de nǚ'ér.",
+        "sentencetranslation": "This is my daughter."
+    })
+    assert validate_flashcard(flashcard, "女儿") is True
+
+
+
 def test_validate_flashcard_extended():
     """
     Tests the extended validation logic in validate_flashcard.
@@ -472,7 +490,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
         # Check that generate_content was called with messages (few-shot + batch)
         actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
         assert actual_messages[:len(expected_messages)] == expected_messages
-        assert actual_messages[-1] == {"role": "user", "parts": [",".join(words)]}
+        assert actual_messages[-1] == {"role": "user", "parts": ["..".join(words)]}
 
 
 import toml
@@ -552,3 +570,49 @@ def test_create_flashcards_progress_bar(
     # Check that the progress bar was updated for both the cached and non-cached word
     mock_pbar = mock_tqdm.return_value
     assert mock_pbar.update.call_count == 2
+
+
+def test_are_structures_identical_exhaustive():
+    """
+    Tests the are_structures_identical function with all combinations of separators for 4 syllables.
+    """
+    from src.main import are_structures_identical
+    import itertools
+
+    syllables = ["a", "b", "c", "d"]
+    separators = [";", "|"]
+    num_separators = len(syllables) - 1
+
+    all_combinations = []
+    for s in itertools.product(separators, repeat=num_separators):
+        res = syllables[0]
+        for i in range(num_separators):
+            res += s[i] + syllables[i+1]
+        all_combinations.append(res)
+
+    for i in range(len(all_combinations)):
+        for j in range(len(all_combinations)):
+            if i == j:
+                assert are_structures_identical(all_combinations[i], all_combinations[j]) is True
+            else:
+                assert are_structures_identical(all_combinations[i], all_combinations[j]) is False
+
+
+def test_are_pipe_counts_equal():
+    """
+    Tests the are_pipe_counts_equal function.
+    """
+    from src.main import are_pipe_counts_equal
+
+    # Equal number of pipe parts
+    assert are_pipe_counts_equal("a|b", "c|d") is True
+    assert are_pipe_counts_equal("a", "c") is True
+    assert are_pipe_counts_equal("a|b|c", "d|e|f") is True
+
+    # Unequal number of pipe parts
+    assert are_pipe_counts_equal("a|b", "c") is False
+    assert are_pipe_counts_equal("a", "c|d") is False
+
+    # Semicolons should be ignored
+    assert are_pipe_counts_equal("a;b|c", "d|e;f") is True
+    assert are_pipe_counts_equal("a;b", "c;d") is True
