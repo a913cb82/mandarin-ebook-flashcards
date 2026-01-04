@@ -7,8 +7,8 @@ import pytest
 from src.main import create_flashcards
 
 
-@patch("google.generativeai.GenerativeModel")
-def test_batch_size_doubles_on_success(mock_generative_model, tmp_path):
+@patch("google.genai.Client")
+def test_batch_size_doubles_on_success(mock_client, tmp_path):
     """
     Tests that the batch size doubles on a successful batch, even if some words
     fail validation.
@@ -24,14 +24,20 @@ def test_batch_size_doubles_on_success(mock_generative_model, tmp_path):
         # separated by '..'
 
         # extract the user message
-        if kwargs.get('cached_content'):
+        if kwargs.get('contents'):
             messages = kwargs['contents']
         else:
-            messages = args[0]
+            messages = kwargs.get('contents', args[0] if args else [])
+        
+        # In the new SDK, contents is a list of types.Content or dicts
         user_message = messages[-1]
+        if hasattr(user_message, 'parts'):
+            text = user_message.parts[0].text
+        else:
+            text = user_message['parts'][0].text if hasattr(user_message['parts'][0], 'text') else user_message['parts'][0]
 
         # extract the words from the user message
-        batch_words = user_message['parts'][0].split('..')
+        batch_words = text.split('..')
 
         response_data = []
         for word in batch_words:
@@ -62,7 +68,7 @@ def test_batch_size_doubles_on_success(mock_generative_model, tmp_path):
         response_df = pd.DataFrame(response_data)
         return MockResponse(json.dumps(response_df.to_dict("records")))
 
-    mock_generative_model.return_value.generate_content.side_effect = generate_content_side_effect
+    mock_client.return_value.models.generate_content.side_effect = generate_content_side_effect
 
     with patch("builtins.print") as mock_print:
         create_flashcards(
@@ -75,8 +81,8 @@ def test_batch_size_doubles_on_success(mock_generative_model, tmp_path):
         mock_print.assert_any_call("Batch succeeded, increasing batch size to 4")
 
 
-@patch("google.generativeai.GenerativeModel")
-def test_binary_search_on_failure(mock_generative_model, tmp_path):
+@patch("google.genai.Client")
+def test_binary_search_on_failure(mock_client, tmp_path):
     """
     Tests that the batch size is adjusted after a failure.
     """
@@ -88,12 +94,14 @@ def test_binary_search_on_failure(mock_generative_model, tmp_path):
 
     def generate_content_side_effect(*args, **kwargs):
         # Batch size is inferred from the number of words in the prompt
-        if kwargs.get('cached_content'):
-            messages = kwargs['contents']
-        else:
-            messages = args[0]
+        messages = kwargs.get('contents', args[0] if args else [])
         user_message = messages[-1]
-        batch_size = len(user_message['parts'][0].split('..'))
+        if hasattr(user_message, 'parts'):
+            text = user_message.parts[0].text
+        else:
+            text = user_message['parts'][0].text if hasattr(user_message['parts'][0], 'text') else user_message['parts'][0]
+            
+        batch_size = len(text.split('..'))
         if batch_size > 20:
             raise Exception("Batch size too large")
 
@@ -109,12 +117,12 @@ def test_binary_search_on_failure(mock_generative_model, tmp_path):
                     "sentencepinyin": "sentpinyin",
                     "sentencetranslation": "senttrans",
                 }
-                for word in user_message['parts'][0].split('..')
+                for word in text.split('..')
             ]
         )
         return MockResponse(json.dumps(response_df.to_dict("records")))
 
-    mock_generative_model.return_value.generate_content.side_effect = generate_content_side_effect
+    mock_client.return_value.models.generate_content.side_effect = generate_content_side_effect
 
     with patch("builtins.print") as mock_print:
         create_flashcards(

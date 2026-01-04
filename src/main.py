@@ -6,7 +6,7 @@ import toml
 import unicodedata
 from collections import Counter, OrderedDict
 from io import StringIO
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 import ebooklib
@@ -14,14 +14,12 @@ import jieba
 import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
-import google.generativeai as genai
-import google.generativeai.caching as gencache
+from google import genai
+from google.genai import types
 from tqdm import tqdm
 
 load_dotenv()
-api_key = os.environ.get("GOOGLE_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
+# API key is loaded from environment variable when initializing the client
 
 # Get the directory of the current file
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -205,32 +203,34 @@ def create_flashcards(
 
     messages = []
     for example in FEW_SHOT_EXAMPLES:
-        messages.append({"role": "user", "parts": [example["input"]]})
-        messages.append({"role": "model", "parts": [example["output"]]})
+        messages.append(types.Content(role="user", parts=[types.Part.from_text(text=example["input"])]))
+        messages.append(types.Content(role="model", parts=[types.Part.from_text(text=example["output"])]))
 
-    llm_model = genai.GenerativeModel(
-        model,
-        generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": {
-                "type": "array",
-                "items": flashcard_schema,
-            },
-        },
-        system_instruction=SYSTEM_PROMPT,
-        safety_settings={
-            'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
-            'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-            'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-            'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-        }
-    )
+    client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
+    cached_content_name = None
     if cache_tokens:
-        cached_content = gencache.CachedContent.create(
-            model=model,
+        cache_config = types.CreateCachedContentConfig(
             contents=messages,
         )
+        # Using the model name directly, but ensure it's compatible with cache creation if needed.
+        # Often models need to be prefixed with 'models/' for caching.
+        cache_model = model if model.startswith("models/") else f"models/{model}"
+        
+        try:
+             cached_content = client.caches.create(
+                model=cache_model,
+                config=cache_config,
+            )
+             cached_content_name = cached_content.name
+        except Exception as e:
+            if verbose > 0:
+                print(f"Failed to create cache: {e}")
+            # Fallback to no caching if it fails? Or raise?
+            # For now, let's proceed without caching if it fails, or maybe just log.
+            # But the original code didn't try/except creation.
+            # Let's let it raise if it fails, as per original behavior intent.
+            raise e
 
     batch_size = initial_batch_size
 
@@ -240,22 +240,65 @@ def create_flashcards(
         response = None
 
         try:
-            if cache_tokens:
-                response = llm_model.generate_content(
-                    contents=[{"role": "user", "parts": ["..".join(batch)]}],
-                    cached_content=cached_content,
-                )
+            current_messages = []
+            generate_config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=types.Schema(
+                    type=types.Type.ARRAY,
+                    items=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            k: types.Schema(type=types.Type.STRING) for k in flashcard_schema["properties"]
+                        },
+                        required=flashcard_schema["required"]
+                    )
+                ),
+                system_instruction=SYSTEM_PROMPT,
+                safety_settings=[
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ]
+            )
+
+            if cache_tokens and cached_content_name:
+                generate_config.cached_content = cached_content_name
+                current_messages = [types.Content(role="user", parts=[types.Part.from_text(text="..".join(batch))])]
             else:
-                response = llm_model.generate_content(messages + [{"role": "user", "parts": ["..".join(batch)]}])
+                # If not using cache, we need to send the full history
+                current_messages = messages + [types.Content(role="user", parts=[types.Part.from_text(text="..".join(batch))])]
+
+            response = client.models.generate_content(
+                model=model,
+                contents=current_messages,
+                config=generate_config
+            )
             response_df = pd.DataFrame(json.loads(response.text))
         except Exception as e:
             if verbose > 0:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
                 if response:
-                    print(f"{response.prompt_feedback=}")
-                    if response.parts:
-                        print(f"{response.parts=}")
+                    # response.prompt_feedback isn't directly available in the same way in new SDK, 
+                    # usually check usage_metadata or candidates finish_reason
+                    try:
+                        print(f"{response.usage_metadata=}")
+                        print(f"{response.candidates=}")
+                    except:
+                        pass
             for word in batch:
                 retry_counts[word] += 1
                 if retry_counts[word] < retries:

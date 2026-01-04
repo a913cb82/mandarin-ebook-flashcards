@@ -8,7 +8,7 @@ version = "0.1.0"
 dependencies = [
     "ebooklib",
     "jieba",
-    "google-generativeai",
+    "google-genai",
     "pandas",
     "pytest",
     "beautifulsoup4",
