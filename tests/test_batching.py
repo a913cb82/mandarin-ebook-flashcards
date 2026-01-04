@@ -33,40 +33,52 @@ def test_batch_size_doubles_on_success(mock_generative_model, tmp_path):
         # extract the words from the user message
         batch_words = user_message['parts'][0].split('..')
 
-        response_df = pd.DataFrame(
-            [
-                {
+        response_data = []
+        for word in batch_words:
+            if word == 'word1':
+                 # Intentionally invalid data for word1
+                 response_data.append({
                     "hanzi": word,
-                    "pinyin": "pinyin",
-                    "pinyinnumbered": "pinyin1",
+                    "pinyin": "invalid pinyin",
+                    "pinyinnumbered": "hao3", # Mismatch
                     "definition": "def",
                     "partofspeech": "pos",
                     "sentencehanzi": f"sent {word}",
                     "sentencepinyin": "sentpinyin",
                     "sentencetranslation": "senttrans",
-                }
-                for word in batch_words
-            ]
-        )
+                 })
+            else:
+                response_data.append({
+                    "hanzi": word,
+                    "pinyin": "hǎo",
+                    "pinyinnumbered": "hao3",
+                    "definition": "def",
+                    "partofspeech": "pos",
+                    "sentencehanzi": f"sent {word}",
+                    "sentencepinyin": "sentpinyin",
+                    "sentencetranslation": "senttrans",
+                })
+
+        response_df = pd.DataFrame(response_data)
         return MockResponse(json.dumps(response_df.to_dict("records")))
 
     mock_generative_model.return_value.generate_content.side_effect = generate_content_side_effect
 
-            with patch("src.main.validate_flashcard", side_effect=lambda flashcard, word, verbose: word != 'word1'):
-                with patch("builtins.print") as mock_print:
-                    create_flashcards(
-                        words,
-                        initial_batch_size=2,
-                        cache_dir=str(tmp_path),
-                        verbose=1,
-                        batch_size_multiplier=2.0,
-                    )
-        
-            mock_print.assert_any_call("Batch size set to 4")
+    with patch("builtins.print") as mock_print:
+        create_flashcards(
+            words,
+            initial_batch_size=2,
+            cache_dir=str(tmp_path),
+            verbose=1,
+        )
+    
+        mock_print.assert_any_call("Batch succeeded, increasing batch size to 4")
+
+
 @patch("google.generativeai.GenerativeModel")
 def test_binary_search_on_failure(mock_generative_model, tmp_path):
     """
-    Tests that the batch size is adjusted using binary search after a failure.
+    Tests that the batch size is adjusted after a failure.
     """
     words = [f"word{i}" for i in range(100)]
 
@@ -89,8 +101,8 @@ def test_binary_search_on_failure(mock_generative_model, tmp_path):
             [
                 {
                     "hanzi": word,
-                    "pinyin": "pinyin",
-                    "pinyinnumbered": "pinyin1",
+                    "pinyin": "hǎo",
+                    "pinyinnumbered": "hao3",
                     "definition": "def",
                     "partofspeech": "pos",
                     "sentencehanzi": f"sent {word}",
@@ -113,10 +125,8 @@ def test_binary_search_on_failure(mock_generative_model, tmp_path):
         )
 
         # Phase 1: Exponential growth
-        mock_print.assert_any_call("Batch size set to 8")
-
-    # Phase 2: Binary search
-    mock_print.assert_any_call("Entering binary search for batch size between 16 and 32")
-    mock_print.assert_any_call("Batch size set to 24")  # (16 + 32) // 2, fails
-    mock_print.assert_any_call("Batch size set to 20")  # (16 + 24) // 2, fails
-    # The final batch size should be around 19 or 20
+        mock_print.assert_any_call("Batch succeeded, increasing batch size to 8")
+        mock_print.assert_any_call("Batch succeeded, increasing batch size to 16")
+        
+        # When it tries 32, it fails
+        mock_print.assert_any_call("Batch failed, reducing batch size to 16")
