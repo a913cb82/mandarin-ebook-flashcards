@@ -221,7 +221,7 @@ def test_create_flashcards_dynamic_batch_size(
         cache_tokens=cache_tokens,
     )
     assert len(flashcards) == 4
-    assert mock_client.return_value.models.generate_content.call_count == 3
+    assert mock_client.return_value.models.generate_content.call_count == 4
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
 @patch("google.genai.Client")
