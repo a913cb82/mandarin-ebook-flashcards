@@ -16,6 +16,8 @@ dependencies = [
     "python-dotenv",
     "tqdm",
     "toml",
+    "pytest-socket",
+    "pytest-timeout",
 ]
 
 [tool.setuptools.packages.find]

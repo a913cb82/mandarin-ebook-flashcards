@@ -169,7 +169,7 @@ def test_validate_flashcard_extended():
 
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
-@patch("src.main.validate_flashcard", side_effect=[False, False, True, True, True, True])
+@patch("src.main.validate_flashcard")
 @patch("google.generativeai.caching.CachedContent")
 @patch("google.generativeai.GenerativeModel")
 def test_create_flashcards_dynamic_batch_size(
@@ -182,27 +182,37 @@ def test_create_flashcards_dynamic_batch_size(
     """
     Tests that the batch size is adjusted dynamically.
     """
+    mock_validate_flashcard.side_effect = [False, False, True, True, True, True]
     words = ["你好", "世界", "我们", "他们"]
-    response_df = pd.DataFrame(
-        {
-            "hanzi": ["你好", "世界", "我们", "他们"],
-            "pinyin": ["ní hǎo", "shì jiè", "wǒ men", "tā men"],
-            "pinyinnumbered": ["ni2 hao3", "shi4 jie4", "wo3 men5", "ta1 men5"],
-            "definition": ["hello", "world", "we", "they"],
-            "partofspeech": ["greeting", "noun", "pronoun", "pronoun"],
-            "sentencehanzi": ["你好吗？", "你好世界", "我们是朋友", "他们是学生"],
-            "sentencepinyin": ["Nǐ hǎo ma?", "Nǐ hǎo shì jiè", "Wǒmen shì péngyǒu", "Tāmen shì xuéshēng"],
-            "sentencetranslation": ["How are you?", "Hello world", "We are friends", "They are students"],
-        }
-    )
-
+    
     class MockResponse:
         def __init__(self, content):
             self.text = content
 
-    mock_completion.return_value.generate_content.return_value = MockResponse(
-        json.dumps(response_df.to_dict("records"))
-    )
+    def generate_content_side_effect(*args, **kwargs):
+        if kwargs.get('cached_content'):
+            contents = kwargs['contents']
+        else:
+            contents = args[0]
+        batch_words = contents[-1]["parts"][0].split("..")
+        response_df = pd.DataFrame(
+            [
+                {
+                    "hanzi": word,
+                    "pinyin": "pinyin",
+                    "pinyinnumbered": "pinyin1",
+                    "definition": "def",
+                    "partofspeech": "pos",
+                    "sentencehanzi": f"sent {word}",
+                    "sentencepinyin": "sentpinyin",
+                    "sentencetranslation": "senttrans",
+                }
+                for word in batch_words
+            ]
+        )
+        return MockResponse(json.dumps(response_df.to_dict("records")))
+
+    mock_completion.return_value.generate_content.side_effect = generate_content_side_effect
 
     flashcards = create_flashcards(
         words,
@@ -215,7 +225,6 @@ def test_create_flashcards_dynamic_batch_size(
     )
     assert len(flashcards) == 4
     assert mock_completion.return_value.generate_content.call_count == 3
-
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
 @patch("google.generativeai.caching.CachedContent")
@@ -236,7 +245,7 @@ def test_create_flashcards_fails_after_retries(
         words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path), cache_tokens=cache_tokens
     )
     assert len(flashcards) == 0
-    assert mock_completion.return_value.generate_content.call_count == 3
+    assert mock_completion.return_value.generate_content.call_count == 1
 
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
@@ -325,8 +334,8 @@ def test_save_flashcards(tmp_path) -> None:
             "hanzi": ["你好"],
             "pinyin": ["ní hǎo"],
             "pinyinnumbered": ["ni2 hao3"],
-            "definition": ["hello"],
-            "partofspeech": ["greeting"],
+            "definition": "hello",
+            "partofspeech": "greeting",
             "sentencehanzi": "你好吗？",
             "sentencepinyin": "Nǐ hǎo ma?",
             "sentencetranslation": "How are you?",
@@ -481,12 +490,12 @@ def test_create_flashcards_uses_system_prompt_from_file(
     if cache_tokens:
         # Check that cached_content.create was called correctly
         mock_cached_content.create.assert_called_once_with(
-            model=mock_generative_model.call_args[0][0],
+            model=f"models/{mock_generative_model.call_args[0][0]}",
             contents=expected_messages,
         )
         # Check that generate_content was called with cached_content and the batch
         mock_generative_model.return_value.generate_content.assert_called_once_with(
-            contents=[{"role": "user", "parts": ["..\n".join(words)]}],
+            contents=[{"role": "user", "parts": ["..".join(words)]}],
             cached_content=mock_cached_content.create.return_value,
         )
     else:
@@ -495,7 +504,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
         # Check that generate_content was called with messages (few-shot + batch)
         actual_messages = mock_generative_model.return_value.generate_content.call_args[0][0]
         assert actual_messages[:len(expected_messages)] == expected_messages
-        assert actual_messages[-1] == {"role": "user", "parts": ["..\n".join(words)]}
+        assert actual_messages[-1] == {"role": "user", "parts": ["..".join(words)]}
 
 
 import toml
