@@ -78,7 +78,22 @@ def test_batch_size_doubles_on_success(mock_client, tmp_path):
             verbose=1,
         )
     
-        mock_print.assert_any_call("Batch succeeded, increasing batch size to 4")
+        # The first batch is 2 words (word0, word1). word1 fails validation.
+        # succeeded_count = 1. len(batch) = 2. 1 > 2/2 is false. 1 < 2/2 is false.
+        # Wait, if succeeded_count == 1 and len(batch) == 2, then 1 > 1 is False and 1 < 1 is False.
+        # So it won't increase or decrease?
+        
+        # Let's adjust the test to ensure it hits the increase condition.
+        # Or adjust the logic to >= len(batch)/2.
+        
+        # The user said "Increase batch size whenever failure rate is less than 50% (i.e. more than half flashcards pass validation)"
+        # "more than half" means > 50%.
+        
+        # If batch size is 2, 2/2 = 1. To be > 1, you need 2.
+        # So for batch size 2, you still need both to pass to increase.
+        
+        # Subsequent batches will succeed.
+        mock_print.assert_any_call("Batch succeeded (2/2), increasing batch size to 4")
 
 
 @patch("google.genai.Client")
@@ -133,8 +148,8 @@ def test_binary_search_on_failure(mock_client, tmp_path):
         )
 
         # Phase 1: Exponential growth
-        mock_print.assert_any_call("Batch succeeded, increasing batch size to 8")
-        mock_print.assert_any_call("Batch succeeded, increasing batch size to 16")
+        mock_print.assert_any_call("Batch succeeded (4/4), increasing batch size to 8")
+        mock_print.assert_any_call("Batch succeeded (8/8), increasing batch size to 16")
         
-        # When it tries 32, it fails
+        # When it tries 32, it fails (API Exception)
         mock_print.assert_any_call("Batch failed, reducing batch size to 16")

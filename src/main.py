@@ -372,10 +372,14 @@ def create_flashcards(
                     if pbar:
                         pbar.update(1)
         
-        if succeeded_count == len(batch):
+        if succeeded_count > len(batch) / 2:
             batch_size = int(batch_size * batch_size_multiplier)
             if verbose > 0:
-                print(f"Batch succeeded, increasing batch size to {batch_size}")
+                print(f"Batch succeeded ({succeeded_count}/{len(batch)}), increasing batch size to {batch_size}")
+        elif succeeded_count < len(batch) / 2:
+            batch_size = max(1, int(batch_size / batch_size_multiplier))
+            if verbose > 0:
+                print(f"Batch failed ({succeeded_count}/{len(batch)}), reducing batch size to {batch_size}")
 
     if pbar:
         pbar.close()
