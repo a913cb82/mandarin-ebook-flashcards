@@ -1,32 +1,48 @@
 # Ebook Flashcards
 
-This project is a Python script that extracts all the unique words from a Chinese ebook and generates flashcards for them. The flashcards are saved as a TSV file that can be imported into Anki.
+This project extracts unique words from Chinese ebooks (or lists) and generates comprehensive flashcards using the Google Gemini API, saving them as Anki-ready TSV files.
 
 ## Features
 
-*   Reads `.epub` ebooks
-*   Extracts all unique words from the ebook
-*   Generates flashcards with pinyin, definition, part of speech, and an example sentence
-*   Saves the flashcards as a TSV file
+*   **Extraction:** Reads `.epub` files or raw text lists, segmenting Chinese words via `jieba`.
+*   **Generation:** Uses LLMs to generate Pinyin (tone-marked & numbered), definitions, parts of speech, and example sentences.
+*   **Validation:** rigorous consistency checks for pinyin and data structure.
+*   **Efficiency:** Caches results locally and handles API rate limits with dynamic batching.
 
 ## Usage
 
-1.  Set your Gemini API key as an environment variable:
-
+1.  **Setup:**
     ```bash
-    export GEMINI_API_KEY="YOUR_API_KEY"
+    export GOOGLE_API_KEY="YOUR_API_KEY"
     ```
 
-2.  Run the script:
-
+2.  **Run:**
     ```bash
-    python3 src/main.py my_ebook.epub my_flashcards.tsv
+    # Basic Ebook processing
+    python3 src/main.py input.epub output.tsv --cache-dir .flashcard_cache
     ```
+
+    For a full list of options, run:
+    ```bash
+    python3 src/main.py --help
+    ```
+
+## Workflow: Updating Existing Anki Cards
+
+To backfill data for existing cards:
+
+1.  **Export:** Export your Anki deck to a text file (e.g., `anki_export.txt`).
+2.  **Extract:** Create a file with just the Hanzi, one per line (e.g., `vocab.txt`).
+3.  **Generate:**
+    ```bash
+    python3 src/main.py vocab.txt new_data.tsv --flashcards-only --cache-dir .flashcard_cache
+    ```
+4.  **Import:** Import `new_data.tsv` into Anki, matching the Hanzi column to update your notes.
 
 ## Testing
 
-To run the tests, run the following command:
+Run tests:
 
 ```bash
-python -m pytest
+PYTHONPATH=. ./.venv/bin/pytest
 ```
