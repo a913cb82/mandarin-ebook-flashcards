@@ -1,7 +1,9 @@
 import argparse
 import json
 import os
+import random
 import re
+import time
 import toml
 import unicodedata
 from collections import Counter, OrderedDict
@@ -15,7 +17,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 from tqdm import tqdm
 
 load_dotenv()
@@ -121,7 +123,7 @@ def create_flashcards(
     initial_batch_size: int = 100,
     batch_size_multiplier: float = 2.0,
     retries: int = 3,
-    model: str = "gemini-pro",
+    model: str = "gemini-3-pro-preview",
     verbose: int = 0,
     cache_tokens: bool = False,
 ) -> pd.DataFrame:
@@ -233,6 +235,7 @@ def create_flashcards(
             raise e
 
     batch_size = initial_batch_size
+    consecutive_rate_limits = 0
 
     while words_to_process:
         batch = words_to_process[:batch_size]
@@ -287,7 +290,39 @@ def create_flashcards(
                 config=generate_config
             )
             response_df = pd.DataFrame(json.loads(response.text))
+            consecutive_rate_limits = 0
         except Exception as e:
+            is_rate_limit = False
+            wait_time = 0
+            
+            if isinstance(e, errors.APIError):
+                if e.code == 429:
+                    is_rate_limit = True
+                    # Extract wait time from details if possible
+                    try:
+                        for detail in e.details.get('details', []):
+                            if detail.get('@type') == 'type.googleapis.com/google.rpc.RetryInfo':
+                                retry_delay = detail.get('retryDelay', '30s')
+                                wait_time = float(retry_delay.rstrip('s'))
+                                break
+                    except:
+                        pass
+            elif "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                is_rate_limit = True
+
+            if is_rate_limit:
+                consecutive_rate_limits += 1
+                if wait_time == 0:
+                    wait_time = (2 ** consecutive_rate_limits) + (random.randint(0, 1000) / 1000)
+                
+                if verbose > 0:
+                    print(f"Rate limit hit (429). Waiting {wait_time:.2f}s before retrying... (Consecutive: {consecutive_rate_limits})")
+                
+                time.sleep(wait_time)
+                # Put the batch back at the front and retry
+                words_to_process = batch + words_to_process
+                continue
+
             if verbose > 0:
                 print(f"Error processing batch: {e}")
                 print(f"{batch=}")
@@ -511,8 +546,8 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="gemini-pro",
-        help="The name of the LLM model to use.",
+        default="gemini-3-pro-preview",
+        help="The name of the LLM model to use (e.g., gemini-3-pro-preview, gemini-3-flash-preview).",
     )
     parser.add_argument(
         "--vocab-only",
