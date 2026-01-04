@@ -245,7 +245,7 @@ def test_create_flashcards_fails_after_retries(
         words, initial_batch_size=1, retries=3, cache_dir=str(tmp_path), cache_tokens=cache_tokens
     )
     assert len(flashcards) == 0
-    assert mock_completion.return_value.generate_content.call_count == 1
+    assert mock_completion.return_value.generate_content.call_count == 3
 
 
 @pytest.mark.parametrize("cache_tokens", [True, False])
@@ -490,7 +490,7 @@ def test_create_flashcards_uses_system_prompt_from_file(
     if cache_tokens:
         # Check that cached_content.create was called correctly
         mock_cached_content.create.assert_called_once_with(
-            model=f"models/{mock_generative_model.call_args[0][0]}",
+            model=mock_generative_model.call_args[0][0],
             contents=expected_messages,
         )
         # Check that generate_content was called with cached_content and the batch

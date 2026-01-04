@@ -19,9 +19,15 @@ import google.generativeai.caching as gencache
 from tqdm import tqdm
 
 load_dotenv()
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+api_key = os.environ.get("GOOGLE_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
 
-with open("src/system_prompt.toml", "r") as f:
+# Get the directory of the current file
+current_dir = os.path.dirname(os.path.abspath(__file__))
+prompt_path = os.path.join(current_dir, "system_prompt.toml")
+
+with open(prompt_path, "r") as f:
     prompt_data = toml.load(f)
     SYSTEM_PROMPT = prompt_data["system_prompt"]
     FEW_SHOT_EXAMPLES = prompt_data["examples"]
