@@ -99,7 +99,7 @@ def test_batch_size_doubles_on_success(mock_client, tmp_path):
 @patch("google.genai.Client")
 def test_binary_search_on_failure(mock_client, tmp_path):
     """
-    Tests that the batch size is adjusted after a failure.
+    Tests that the batch size is adjusted after a failure using midpoint logic.
     """
     words = [f"word{i}" for i in range(100)]
 
@@ -153,3 +153,9 @@ def test_binary_search_on_failure(mock_client, tmp_path):
         
         # When it tries 32, it fails (API Exception)
         mock_print.assert_any_call("Batch failed, reducing batch size to 16")
+        
+        # Next batch of 16 succeeds. 
+        # Attempted increase: 16 * 2.0 = 32. 
+        # max_allowed_batch_size is 32. 
+        # Midpoint: (16 + 32) // 2 = 24.
+        mock_print.assert_any_call("Batch succeeded (16/16), increasing batch size to 24 (midpoint)")
