@@ -236,6 +236,7 @@ def create_flashcards(
 
     batch_size = initial_batch_size
     consecutive_rate_limits = 0
+    max_allowed_batch_size = float("inf")
 
     while words_to_process:
         batch = words_to_process[:batch_size]
@@ -343,6 +344,8 @@ def create_flashcards(
                         print(f"Failed to create valid flashcard for word: {word}")
                     if pbar:
                         pbar.update(1)
+            
+            max_allowed_batch_size = batch_size
             batch_size = max(1, int(batch_size / batch_size_multiplier))
             if verbose > 0:
                 print(f"Batch failed, reducing batch size to {batch_size}")
@@ -373,9 +376,14 @@ def create_flashcards(
                         pbar.update(1)
         
         if succeeded_count > len(batch) / 2:
-            batch_size = int(batch_size * batch_size_multiplier)
-            if verbose > 0:
-                print(f"Batch succeeded ({succeeded_count}/{len(batch)}), increasing batch size to {batch_size}")
+            if int(batch_size * batch_size_multiplier) >= max_allowed_batch_size:
+                batch_size = (batch_size + max_allowed_batch_size) // 2
+                if verbose > 0:
+                    print(f"Batch succeeded ({succeeded_count}/{len(batch)}), increasing batch size to {batch_size} (midpoint)")
+            else:
+                batch_size = int(batch_size * batch_size_multiplier)
+                if verbose > 0:
+                    print(f"Batch succeeded ({succeeded_count}/{len(batch)}), increasing batch size to {batch_size}")
         elif succeeded_count < len(batch) / 2:
             batch_size = max(1, int(batch_size / batch_size_multiplier))
             if verbose > 0:
