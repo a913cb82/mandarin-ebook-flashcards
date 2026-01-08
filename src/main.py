@@ -177,6 +177,7 @@ def create_flashcards(
         else:
             words_to_process.append(word)
 
+    random.shuffle(words_to_process)
     retry_counts = {word: 0 for word in words_to_process}
 
     flashcard_schema = {

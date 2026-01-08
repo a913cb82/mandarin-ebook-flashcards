@@ -8,3 +8,5 @@ pyyaml
 python-dotenv
 tqdm
 toml
+pytest-socket
+pytest-timeout
