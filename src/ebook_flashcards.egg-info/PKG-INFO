@@ -11,3 +11,5 @@ Requires-Dist: pyyaml
 Requires-Dist: python-dotenv
 Requires-Dist: tqdm
 Requires-Dist: toml
+Requires-Dist: pytest-socket
+Requires-Dist: pytest-timeout

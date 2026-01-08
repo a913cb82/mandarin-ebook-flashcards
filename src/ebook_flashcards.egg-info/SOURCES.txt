@@ -5,4 +5,5 @@ src/ebook_flashcards.egg-info/SOURCES.txt
 src/ebook_flashcards.egg-info/dependency_links.txt
 src/ebook_flashcards.egg-info/requires.txt
 src/ebook_flashcards.egg-info/top_level.txt
+tests/test_batching.py
 tests/test_main.py
