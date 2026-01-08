@@ -1,10 +1,9 @@
 ebooklib
 jieba
-google-generativeai
+google-genai
 pandas
 pytest
 beautifulsoup4
-pyyaml
 python-dotenv
 tqdm
 toml
