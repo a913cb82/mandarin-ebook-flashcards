@@ -4,4 +4,6 @@ __pycache__/
 .flashcard_cache/
 .cache-flash/
 .cache-pro/
+.pytest_cache/
+.test_cache/
 *.tsv
