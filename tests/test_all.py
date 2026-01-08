@@ -1,28 +1,50 @@
 import json
 import os
-import random
-import re
 import sys
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-import toml
-from google.genai import types
+from ebooklib import epub
 
 from main import (
     create_flashcards,
     extract_vocabulary,
     main,
     read_epub,
-    save_flashcards,
     validate_flashcard,
     convert_pinyin
 )
 
+def create_test_epub(file_path):
+    book = epub.EpubBook()
+    book.set_identifier('id123456')
+    book.set_title('Test Book')
+    book.set_language('zh')
+    book.add_author('Author')
+
+    c1 = epub.EpubHtml(title='第一章', file_name='chap_1.xhtml', lang='zh')
+    c1.content=u'<html><body><h1>第一章</h1><p>这是第一章。</p></body></html>'
+    c2 = epub.EpubHtml(title='第二章', file_name='chap_2.xhtml', lang='zh')
+    c2.content=u'<html><body><h1>第二章</h1><p>这是第二章。</p></body></html>'
+    c3 = epub.EpubHtml(title='第三章', file_name='chap_3.xhtml', lang='zh')
+    c3.content=u'<html><body><h1>第三章</h1><p>这是第三章。</p></body></html>'
+
+    for c in [c1, c2, c3]: book.add_item(c)
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = ['nav', c1, c2, c3]
+    epub.write_epub(file_path, book, {})
+
+@pytest.fixture
+def test_book_path(tmp_path):
+    path = tmp_path / "test_book.epub"
+    create_test_epub(str(path))
+    return str(path)
+
 # Test read_epub
-def test_read_epub() -> None:
-    content = read_epub("tests/test_book.epub")
+def test_read_epub(test_book_path) -> None:
+    content = read_epub(test_book_path)
     assert isinstance(content, str)
     assert "第一章" in content
     assert content.find("第一章") < content.find("第二章") < content.find("第三章")
@@ -124,9 +146,9 @@ def test_create_flashcards_with_caching(mock_client, tmp_path):
     assert mock_client.return_value.models.generate_content.call_count == 1
 
 # Test Main Vocab Only
-def test_main_vocab_only(tmp_path):
+def test_main_vocab_only(tmp_path, test_book_path):
     output_path = tmp_path / "output.txt"
-    with patch("sys.argv", ["main.py", "tests/test_book.epub", str(output_path), "--vocab-only"]):
+    with patch("sys.argv", ["main.py", test_book_path, str(output_path), "--vocab-only"]):
         main()
     assert output_path.exists()
     assert "第一章" in output_path.read_text()
