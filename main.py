@@ -5,7 +5,7 @@ import random
 import re
 import time
 from collections import Counter
-from typing import Dict, List, Optional, Any
+from typing import List, Optional, Any
 
 import ebooklib
 import jieba
@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from ebooklib import epub
 from google import genai
-from google.genai import types, errors
+from google.genai import types
 from tqdm import tqdm
 
 # Constants
