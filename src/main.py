@@ -9,7 +9,9 @@ from utils import extract_vocabulary, read_epub
 def main() -> None:
     """CLI entry point for mandarin-ebook-flashcards."""
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Create Anki flashcards from Chinese text.")
+    parser = argparse.ArgumentParser(
+        description="Create Anki flashcards from Chinese text."
+    )
     parser.add_argument("input_path", help="Path to input (EPUB or txt list)")
     parser.add_argument("output_path", help="Path to save flashcards (TSV)")
     parser.add_argument("--initial-batch-size", type=int, default=100)
@@ -33,7 +35,9 @@ def main() -> None:
             if args.input_path.endswith(".epub")
             else open(args.input_path).read()
         )
-        words = extract_vocabulary(text, args.stop_words, args.min_frequency, args.verbose)
+        words = extract_vocabulary(
+            text, args.stop_words, args.min_frequency, args.verbose
+        )
 
     if args.vocab_only:
         with open(args.output_path, "w") as f:

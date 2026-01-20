@@ -7,7 +7,11 @@ def test_read_epub(test_book_path) -> None:
     content = read_epub(test_book_path)
     assert isinstance(content, str)
     assert "第一章" in content
-    assert content.find("第一章") < content.find("第二章") < content.find("第三章")
+    assert (
+        content.find("第一章")
+        < content.find("第二章")
+        < content.find("第三章")
+    )
 
 
 def test_extract_vocabulary() -> None:

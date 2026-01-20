@@ -27,7 +27,10 @@ def _convert_pinyin_callback(m: Match[str]) -> str:
 
 
 def convert_pinyin(s: str) -> str:
-    """Converts numbered pinyin (e.g., ni2 hao3) to tone-marked pinyin (e.g., ní hǎo)."""
+    """Converts numbered pinyin to tone-marked pinyin."""
     return re.sub(
-        r"([aeiouüvÜ]{1,3})(n?g?r?)([012345])", _convert_pinyin_callback, s, flags=re.IGNORECASE
+        r"([aeiouüvÜ]{1,3})(n?g?r?)([012345])",
+        _convert_pinyin_callback,
+        s,
+        flags=re.IGNORECASE,
     )

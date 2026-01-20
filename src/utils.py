@@ -18,7 +18,10 @@ def read_epub(file_path: str) -> str:
 
 
 def extract_vocabulary(
-    text: str, stop_words_path: str | None = None, min_freq: int = 1, verbose: bool = False
+    text: str,
+    stop_words_path: str | None = None,
+    min_freq: int = 1,
+    verbose: bool = False,
 ) -> list[str]:
     """Extracts Chinese vocabulary from text using jieba."""
     stop_words = set()

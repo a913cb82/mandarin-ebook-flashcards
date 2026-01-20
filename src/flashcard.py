@@ -33,7 +33,8 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
             print(f"Missing columns for {word}")
         return False
     if any(
-        pd.isna(card_dict.get(col)) or str(card_dict.get(col, "")).strip() == ""
+        pd.isna(card_dict.get(col))
+        or str(card_dict.get(col, "")).strip() == ""
         for col in EXPECTED_COLUMNS
     ):
         if verbose > 1:
@@ -50,9 +51,16 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
 
     # Pinyin consistency check
     tm_parts = [
-        p.strip() for p in str(card_dict["pinyin"]).replace(";", "|").replace("'", "").split("|")
+        p.strip()
+        for p in str(card_dict["pinyin"])
+        .replace(";", "|")
+        .replace("'", "")
+        .split("|")
     ]
-    n_parts = [p.strip() for p in str(card_dict["pinyinnumbered"]).replace(";", "|").split("|")]
+    n_parts = [
+        p.strip()
+        for p in str(card_dict["pinyinnumbered"]).replace(";", "|").split("|")
+    ]
 
     if len(tm_parts) != len(n_parts):
         if verbose > 1:
@@ -61,14 +69,20 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
     for tm, n in zip(tm_parts, n_parts, strict=True):
         if tm != convert_pinyin(n):
             if verbose > 1:
-                print(f"Pinyin conversion mismatch for {word}: {tm} != {convert_pinyin(n)}")
+                msg = (
+                    f"Pinyin conversion mismatch for {word}: "
+                    f"{tm} != {convert_pinyin(n)}"
+                )
+                print(msg)
             return False
 
     # Structure check (semicolons vs pipes)
     def get_struct(s: Any) -> list[int]:
         return [len(p.split(";")) for p in str(s).split("|")]
 
-    if get_struct(card_dict["pinyin"]) != get_struct(card_dict["pinyinnumbered"]):
+    if get_struct(card_dict["pinyin"]) != get_struct(
+        card_dict["pinyinnumbered"]
+    ):
         if verbose > 1:
             print(f"Structure mismatch for {word}")
         return False
@@ -96,7 +110,7 @@ def create_flashcards(
     model: str = "gemini-1.5-flash",
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Creates flashcards for a list of words using the Gemini API, with caching and batching."""
+    """Creates flashcards using Gemini API with caching and batching."""
     os.makedirs(cache_dir, exist_ok=True)
     with open("system_prompt.toml") as f:
         prompt_data = toml.load(f)
@@ -127,7 +141,9 @@ def create_flashcards(
 
     if not to_process:
         pbar.close()
-        return pd.DataFrame([flashcards_map[w] for w in words if w in flashcards_map])
+        return pd.DataFrame(
+            [flashcards_map[w] for w in words if w in flashcards_map]
+        )
 
     random.shuffle(to_process)
     client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
@@ -150,7 +166,8 @@ def create_flashcards(
                     items=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
-                            k: types.Schema(type=types.Type.STRING) for k in EXPECTED_COLUMNS
+                            k: types.Schema(type=types.Type.STRING)
+                            for k in EXPECTED_COLUMNS
                         },
                         required=EXPECTED_COLUMNS,
                     ),
@@ -160,16 +177,27 @@ def create_flashcards(
             contents = []
             for ex in examples:
                 contents.append(
-                    types.Content(role="user", parts=[types.Part.from_text(text=ex["input"])])
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=ex["input"])],
+                    )
                 )
                 contents.append(
-                    types.Content(role="model", parts=[types.Part.from_text(text=ex["output"])])
+                    types.Content(
+                        role="model",
+                        parts=[types.Part.from_text(text=ex["output"])],
+                    )
                 )
             contents.append(
-                types.Content(role="user", parts=[types.Part.from_text(text="..\n".join(batch))])
+                types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text="..\n".join(batch))],
+                )
             )
 
-            response = client.models.generate_content(model=model, contents=contents, config=config)
+            response = client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
             if response.text is None:
                 raise ValueError("API returned empty response text")
 
@@ -180,7 +208,9 @@ def create_flashcards(
             for word in batch:
                 if word in res_map and validate_flashcard(res_map[word], word):
                     flashcards_map[word] = res_map[word]
-                    with open(os.path.join(cache_dir, f"{word}.json"), "w") as f:
+                    with open(
+                        os.path.join(cache_dir, f"{word}.json"), "w"
+                    ) as f:
                         json.dump(res_map[word], f)
                     pbar.update(1)
                     succeeded += 1
@@ -190,12 +220,18 @@ def create_flashcards(
                         to_process.append(word)
                     else:
                         if verbose:
-                            print(f"Failed to create valid flashcard for word: {word}")
+                            print(
+                                f"Failed to create valid flashcard "
+                                f"for word: {word}"
+                            )
                         pbar.update(1)
 
             if succeeded > len(batch) / 2:
                 new_batch_size = int(
-                    min((batch_size + max_batch_size) // 2, batch_size * batch_size_multiplier)
+                    min(
+                        (batch_size + max_batch_size) // 2,
+                        batch_size * batch_size_multiplier,
+                    )
                 )
                 if verbose:
                     print(f"increasing batch size to {new_batch_size}")
@@ -242,5 +278,7 @@ def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
         # Ensure no tabs in content to avoid breaking TSV format
         flashcards_clean = flashcards[EXPECTED_COLUMNS].copy()
         for col in EXPECTED_COLUMNS:
-            flashcards_clean[col] = flashcards_clean[col].apply(lambda x: str(x).replace("\t", " "))
+            flashcards_clean[col] = flashcards_clean[col].apply(
+                lambda x: str(x).replace("\t", " ")
+            )
         flashcards_clean.to_csv(file_path, sep="\t", index=False, header=False)

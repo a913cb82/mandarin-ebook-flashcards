@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from flashcard import EXPECTED_COLUMNS, create_flashcards, save_flashcards, validate_flashcard
+from flashcard import (
+    EXPECTED_COLUMNS,
+    create_flashcards,
+    save_flashcards,
+    validate_flashcard,
+)
 
 
 def test_save_flashcards_with_tabs(tmp_path):
@@ -109,7 +114,9 @@ def test_validate_flashcard_failures():
 
 @patch("random.shuffle")
 @patch("google.genai.Client")
-def test_create_flashcards_shuffles_and_preserves_order(mock_client, mock_shuffle, tmp_path):
+def test_create_flashcards_shuffles_and_preserves_order(
+    mock_client, mock_shuffle, tmp_path
+):
     words = ["你好", "世界"]
     mock_client.return_value.models.generate_content.return_value = MagicMock(
         text=json.dumps(
@@ -137,7 +144,9 @@ def test_create_flashcards_shuffles_and_preserves_order(mock_client, mock_shuffl
             ]
         )
     )
-    flashcards = create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path))
+    flashcards = create_flashcards(
+        words, initial_batch_size=2, cache_dir=str(tmp_path)
+    )
     mock_shuffle.assert_called_once()
     assert set(flashcards["hanzi"].tolist()) == set(words)
 
@@ -169,8 +178,14 @@ def test_batch_size_doubles_on_success(mock_client, tmp_path):
 
     mock_client.return_value.models.generate_content.side_effect = side_effect
     with patch("builtins.print") as mock_print:
-        create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True)
-        increase_calls = [c for c in mock_print.mock_calls if "increasing batch size" in str(c)]
+        create_flashcards(
+            words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
+        )
+        increase_calls = [
+            c
+            for c in mock_print.mock_calls
+            if "increasing batch size" in str(c)
+        ]
         assert len(increase_calls) > 0
 
 
@@ -202,8 +217,14 @@ def test_batch_size_decreases_on_failure(mock_client, tmp_path):
     ]
 
     with patch("builtins.print") as mock_print:
-        create_flashcards(words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True)
-        decrease_calls = [c for c in mock_print.mock_calls if "decreasing batch size" in str(c)]
+        create_flashcards(
+            words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
+        )
+        decrease_calls = [
+            c
+            for c in mock_print.mock_calls
+            if "decreasing batch size" in str(c)
+        ]
         assert len(decrease_calls) > 0
 
 
@@ -247,12 +268,18 @@ def test_create_flashcards_hits_max_retries(mock_client, tmp_path):
 
     with patch("builtins.print") as mock_print:
         flashcards = create_flashcards(
-            [word], initial_batch_size=1, retries=2, cache_dir=str(tmp_path), verbose=True
+            [word],
+            initial_batch_size=1,
+            retries=2,
+            cache_dir=str(tmp_path),
+            verbose=True,
         )
         assert flashcards.empty
         # Check for failure message
         failure_msg = f"Failed to create valid flashcard for word: {word}"
-        failure_calls = [c for c in mock_print.mock_calls if failure_msg in str(c)]
+        failure_calls = [
+            c for c in mock_print.mock_calls if failure_msg in str(c)
+        ]
         assert len(failure_calls) > 0
 
 
