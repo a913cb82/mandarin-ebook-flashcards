@@ -1,0 +1,58 @@
+[project]
+name = "mandarin-ebook-flashcards"
+version = "0.1.0"
+description = "Generate Anki-ready flashcards from Chinese ebooks using Gemini."
+authors = [{ name = "Alex B" }]
+dependencies = [
+    "ebooklib",
+    "jieba",
+    "google-genai",
+    "pandas",
+    "beautifulsoup4",
+    "python-dotenv",
+    "tqdm",
+    "toml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-socket",
+    "pytest-timeout",
+    "ruff",
+    "mypy",
+    "types-toml",
+    "pandas-stubs",
+    "types-beautifulsoup4",
+    "types-tqdm",
+    "pre-commit",
+]
+
+[project.scripts]
+mandarin-ebook-flashcards = "main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = []
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --disable-socket"
+timeout = 5
+pythonpath = ["src"]

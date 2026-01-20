@@ -3,21 +3,48 @@
 Generate Anki-ready flashcards from Chinese ebooks using Gemini.
 
 ## Setup
-```bash
-export GOOGLE_API_KEY="your_key"
-pip install -r requirements.txt
-```
+
+1.  **Install the project:**
+
+    ```bash
+    pip install .
+    ```
+
+    Or for development:
+
+    ```bash
+    pip install -e ".[dev]"
+    ```
+
+2.  **Set up your Google API Key:**
+
+    ```bash
+    export GOOGLE_API_KEY="your_key"
+    ```
 
 ## Usage
+
+The project installs a CLI tool named `mandarin-ebook-flashcards`.
+
 ```bash
 # Process ebook
-python3 main.py input.epub output.tsv
+mandarin-ebook-flashcards input.epub output.tsv
 
 # Process vocab list
-python3 main.py vocab.txt output.tsv --flashcards-only
+mandarin-ebook-flashcards vocab.txt output.tsv --flashcards-only
 ```
 
-## Test
+## Development
+
+Run tests:
+
 ```bash
 pytest
+```
+
+Run linting and type checking:
+
+```bash
+ruff check src
+mypy src
 ```
