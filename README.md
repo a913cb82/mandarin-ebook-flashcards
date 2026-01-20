@@ -4,40 +4,17 @@ Generate Anki-ready flashcards from Chinese ebooks using Gemini.
 
 ## Setup
 
-1.  **Install dependencies:**
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-    Wait, we removed requirements.txt. I should probably tell them to use pip install . or just list them.
-    Actually, since we have pyproject.toml, they can still do `pip install .` to get dependencies even if they don't use the entry point.
-    But they wanted to get rid of "install in venv things".
-
-    If they want to run `python src/main.py`, they just need the dependencies in their environment.
-
-    Let's update to:
-
-    ```bash
-    pip install ebooklib jieba google-genai pandas beautifulsoup4 python-dotenv tqdm toml
-    ```
-
-    Or better:
+1.  **Install dependencies from `pyproject.toml`:**
 
     ```bash
     pip install .
     ```
-    (This still installs the package metadata but ensures dependencies are met).
 
-    Actually, let's keep it simple:
+2.  **Set up your Google API Key:**
 
     ```bash
-    pip install -e .
+    export GOOGLE_API_KEY="your_key"
     ```
-
-    No, they said "get rid of that install in venv things".
-
-    Okay, I will list the dependencies.
 
 ## Usage
 
@@ -51,15 +28,17 @@ python src/main.py vocab.txt output.tsv --flashcards-only
 
 ## Development
 
-Run tests:
+1.  **Install development dependencies and pre-commit hooks:**
 
-```bash
-pytest
-```
+    ```bash
+    pip install ".[dev]"
+    pre-commit install
+    ```
 
-Run linting and type checking:
+2.  **Run checks:**
 
-```bash
-ruff check src
-mypy src
-```
+    ```bash
+    pytest
+    ruff check src
+    mypy src
+    ```
