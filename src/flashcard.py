@@ -239,4 +239,8 @@ def create_flashcards(
 def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     """Saves flashcards to a TSV file."""
     if not flashcards.empty:
-        flashcards[EXPECTED_COLUMNS].to_csv(file_path, sep="\t", index=False, header=False)
+        # Ensure no tabs in content to avoid breaking TSV format
+        flashcards_clean = flashcards[EXPECTED_COLUMNS].copy()
+        for col in EXPECTED_COLUMNS:
+            flashcards_clean[col] = flashcards_clean[col].apply(lambda x: str(x).replace("\t", " "))
+        flashcards_clean.to_csv(file_path, sep="\t", index=False, header=False)
