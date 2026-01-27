@@ -216,6 +216,10 @@ def create_flashcards(
                     succeeded += 1
                 else:
                     retry_counts[word] += 1
+                    if verbose:
+                        print(
+                            f"Retry {retry_counts[word]}/{retries} for: {word}"
+                        )
                     if retry_counts[word] < retries:
                         to_process.append(word)
                     else:
@@ -249,12 +253,20 @@ def create_flashcards(
                 print(f"Exception occurred: {e}")
             if "429" in str(e):
                 time.sleep(30)
-                to_process = batch + to_process
+                # Shuffle batch back into to_process to avoid hitting
+                # the same block if it's somehow problematic
+                to_process.extend(batch)
+                random.shuffle(to_process)
             else:
                 if verbose:
                     print(f"Error: {e}")
                 for word in batch:
                     retry_counts[word] += 1
+                    if verbose:
+                        print(
+                            f"Retry {retry_counts[word]}/{retries} "
+                            f"for: {word} (after error)"
+                        )
                     if retry_counts[word] < retries:
                         to_process.append(word)
                     else:
