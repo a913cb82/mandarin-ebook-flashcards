@@ -64,6 +64,9 @@ def extract_vocabulary(
         with open(stop_words_path) as f:
             stop_words = set(f.read().splitlines())
 
+    if global_freqs is None:
+        global_freqs = {}
+
     words = [
         w
         for w in jieba.cut(text)
@@ -82,9 +85,7 @@ def extract_vocabulary(
         by_freq.setdefault(c, []).append(w)
 
     for _freq, bucket in by_freq.items():
-        if global_freqs:
-            bucket.sort(key=lambda w: global_freqs.get(w, 0), reverse=True)
-        # else: insertion order from the text (already the case from Counter)
+        bucket.sort(key=lambda w: global_freqs.get(w, 0), reverse=True)
 
     sorted_words = [
         w

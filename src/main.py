@@ -30,16 +30,16 @@ def main() -> None:
     )
     parser.add_argument(
         "--global-freqs",
+        default="data/SUBTLEX-CH-WF",
         help="Path to SUBTLEX-CH-WF file (default: data/SUBTLEX-CH-WF)",
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--cache-dir", default=".flashcard_cache")
     args = parser.parse_args()
 
-    global_freqs_path = args.global_freqs or "data/SUBTLEX-CH-WF"
-    global_freqs: dict[str, int] | None = None
-    if os.path.exists(global_freqs_path):
-        global_freqs = load_subtlex_global_freqs(global_freqs_path)
+    global_freqs = {}
+    if os.path.exists(args.global_freqs):
+        global_freqs = load_subtlex_global_freqs(args.global_freqs)
 
     if args.flashcards_only:
         with open(args.input_path) as f:
