@@ -1,9 +1,10 @@
 import argparse
+import os
 
 from dotenv import load_dotenv
 
 from flashcard import create_flashcards, save_flashcards
-from utils import extract_vocabulary, read_epub
+from utils import extract_vocabulary, load_subtlex_global_freqs, read_epub
 
 
 def main() -> None:
@@ -17,14 +18,28 @@ def main() -> None:
     parser.add_argument("--initial-batch-size", type=int, default=100)
     parser.add_argument("--batch-size-multiplier", type=float, default=2.0)
     parser.add_argument("--retries", type=int, default=3)
-    parser.add_argument("--model", default="gemini-1.5-flash")
+    parser.add_argument("--model", default="gemini-3.5-flash")
     parser.add_argument("--vocab-only", action="store_true")
     parser.add_argument("--flashcards-only", action="store_true")
     parser.add_argument("--stop-words", help="Path to stop words file")
-    parser.add_argument("--min-frequency", type=int, default=1)
+    parser.add_argument(
+        "--comprehension",
+        type=float,
+        default=0.98,
+        help="Vocabulary coverage threshold (default: 0.98)",
+    )
+    parser.add_argument(
+        "--global-freqs",
+        help="Path to SUBTLEX-CH-WF file (default: data/SUBTLEX-CH-WF)",
+    )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--cache-dir", default=".flashcard_cache")
     args = parser.parse_args()
+
+    global_freqs_path = args.global_freqs or "data/SUBTLEX-CH-WF"
+    global_freqs: dict[str, int] | None = None
+    if os.path.exists(global_freqs_path):
+        global_freqs = load_subtlex_global_freqs(global_freqs_path)
 
     if args.flashcards_only:
         with open(args.input_path) as f:
@@ -36,7 +51,11 @@ def main() -> None:
             else open(args.input_path).read()
         )
         words = extract_vocabulary(
-            text, args.stop_words, args.min_frequency, args.verbose
+            text,
+            stop_words_path=args.stop_words,
+            comprehension_pct=args.comprehension,
+            verbose=args.verbose,
+            global_freqs=global_freqs,
         )
 
     if args.vocab_only:

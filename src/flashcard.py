@@ -107,7 +107,7 @@ def create_flashcards(
     initial_batch_size: int = 100,
     batch_size_multiplier: float = 2.0,
     retries: int = 3,
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-3.5-flash",
     verbose: bool = False,
 ) -> pd.DataFrame:
     """Creates flashcards using Gemini API with caching and batching."""

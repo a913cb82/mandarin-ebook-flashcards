@@ -17,20 +17,27 @@ def test_read_epub(test_book_path) -> None:
 def test_extract_vocabulary() -> None:
     text = "你好世界你好, this is a test"
     words = extract_vocabulary(text)
+    # 你好=2 (core), 世界=1 (hapax). Core covers 66%, hapax needed for 98%.
     assert set(words) == {"你好", "世界"}
 
 
-def test_extract_vocabulary_with_min_freq() -> None:
+def test_extract_vocabulary_with_comprehension() -> None:
     text = "你好世界你好我们我们我们"
-    words = extract_vocabulary(text, min_freq=2)
-    assert set(words) == {"你好", "我们"}
+    words = extract_vocabulary(text, comprehension_pct=0.5)
+    # 我们=3 alone covers 50% (3/6). Cutoff=1, only 我们 returned.
+    assert words == ["我们"]
 
 
 @patch("builtins.print")
 def test_extract_vocabulary_with_verbose(mock_print: MagicMock) -> None:
     text = "你好世界你好我们我们我们"
-    extract_vocabulary(text, min_freq=3, verbose=True)
-    mock_print.assert_any_call("Vocabulary size with min_freq=1: 3")
+    extract_vocabulary(text, comprehension_pct=0.8, verbose=True)
+    # freq: 我们=3, 你好=2, 世界=1, total=6. 80% cutoff at 你好(freq=2).
+    mock_print.assert_any_call("Total Chinese tokens: 6")
+    mock_print.assert_any_call("Unique words: 3")
+    mock_print.assert_any_call("Words at cutoff frequency: 2")
+    mock_print.assert_any_call("Target coverage reached: 83.33%")
+    mock_print.assert_any_call("Total words to learn: 2")
 
 
 def test_extract_vocabulary_with_stop_words(tmp_path):
