@@ -144,6 +144,9 @@ def test_create_flashcards_shuffles_and_preserves_order(
             ]
         )
     )
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     flashcards = create_flashcards(
         words, initial_batch_size=2, cache_dir=str(tmp_path)
     )
@@ -177,6 +180,9 @@ def test_batch_size_doubles_on_success(mock_client, tmp_path):
         )
 
     mock_client.return_value.models.generate_content.side_effect = side_effect
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     with patch("builtins.print") as mock_print:
         create_flashcards(
             words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
@@ -215,7 +221,9 @@ def test_batch_size_decreases_on_failure(mock_client, tmp_path):
     mock_client.return_value.models.generate_content.side_effect = [
         MagicMock(text=r) for r in responses
     ]
-
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     with patch("builtins.print") as mock_print:
         create_flashcards(
             words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
@@ -253,6 +261,9 @@ def test_create_flashcards_handles_429(mock_client, mock_sleep, tmp_path):
         ),
     ]
 
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     create_flashcards([word], initial_batch_size=1, cache_dir=str(tmp_path))
     assert mock_sleep.called
     assert mock_client.return_value.models.generate_content.call_count == 2
@@ -265,7 +276,9 @@ def test_create_flashcards_hits_max_retries(mock_client, tmp_path):
     mock_client.return_value.models.generate_content.return_value = MagicMock(
         text=json.dumps([{"hanzi": "wrong"}])
     )
-
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     with patch("builtins.print") as mock_print:
         flashcards = create_flashcards(
             [word],
@@ -301,7 +314,9 @@ def test_create_flashcards_with_caching(mock_client, tmp_path):
     mock_client.return_value.models.generate_content.return_value = MagicMock(
         text=json.dumps([card])
     )
-
+    cache_mock = MagicMock()
+    cache_mock.name = "cachedContents/abc123"
+    mock_client.return_value.caches.create.return_value = cache_mock
     create_flashcards([word], initial_batch_size=1, cache_dir=str(cache_dir))
     assert mock_client.return_value.models.generate_content.call_count == 1
 
