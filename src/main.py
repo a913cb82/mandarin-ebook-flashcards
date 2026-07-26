@@ -16,40 +16,62 @@ def main() -> None:
     )
     parser.add_argument("input_path", help="Path to input (EPUB or txt list)")
     parser.add_argument("output_path", help="Path to save flashcards (TSV)")
-    parser.add_argument("--batch-size", type=int, default=20)
-    parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=20,
+        help="Words per batch (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="Max retries per word (default: %(default)s)",
+    )
     parser.add_argument(
         "--model",
         default="ollama:qwen3:8b",
-        help="aichat model (run 'aichat --list-models' to see options)",
+        help="aichat model (default: %(default)s)",
     )
-    parser.add_argument("--vocab-only", action="store_true")
-    parser.add_argument("--flashcards-only", action="store_true")
+    parser.add_argument(
+        "--vocab-only", action="store_true", help="Extract vocab only"
+    )
+    parser.add_argument(
+        "--flashcards-only",
+        action="store_true",
+        help="Generate flashcards from vocab list",
+    )
     parser.add_argument("--stop-words", help="Path to stop words file")
     parser.add_argument(
         "--comprehension",
         type=float,
         default=0.98,
-        help="Vocabulary coverage threshold (default: 0.98)",
+        help="Vocabulary coverage threshold (default: %(default)s)",
     )
     parser.add_argument(
         "--global-freqs",
         default="data/SUBTLEX-CH-WF",
-        help="Path to SUBTLEX-CH-WF file (default: data/SUBTLEX-CH-WF)",
+        help="Path to SUBTLEX-CH-WF file (default: %(default)s)",
     )
-    parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--cache-dir", default=".flashcard_cache")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print retry/error details"
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default=".flashcard_cache",
+        help="Per-word cache location (default: %(default)s)",
+    )
     parser.add_argument(
         "--rpm",
         type=int,
         default=10,
-        help="Requests per minute limit (default: 10)",
+        help="Requests per minute limit, 0=unlimited (default: %(default)s)",
     )
     parser.add_argument(
         "--workers",
         type=int,
         default=1,
-        help="Number of concurrent workers (default: 1)",
+        help="Concurrent threads (default: %(default)s)",
     )
     args = parser.parse_args()
 

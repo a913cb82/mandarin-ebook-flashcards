@@ -12,22 +12,7 @@ python src/main.py vocab.txt cards.tsv --flashcards-only  # vocab list -> flashc
 python src/main.py input.epub vocab.txt --vocab-only      # extract vocab only
 ```
 
-### Options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--model` | `ollama:qwen3:8b` | aichat model (run `aichat --list-models`) |
-| `--rpm` | `10` | Requests per minute limit (0 = unlimited) |
-| `--workers` | `1` | Concurrent threads |
-| `--batch-size` | `20` | Words per batch (adaptive) |
-| `--retries` | `3` | Max retries per word |
-| `--comprehension` | `0.98` | Vocabulary coverage threshold (0-1) |
-| `--cache-dir` | `.flashcard_cache` | Per-word cache location |
-| `--verbose` | | Print retry/error details |
-
-### Output
-
-Tab-separated, 8 columns, no header: `hanzi`, `pinyin`, `pinyinnumbered`, `definition`, `partofspeech`, `sentencehanzi`, `sentencepinyin`, `sentencetranslation`
+Run `python src/main.py --help` for all options and output format.
 
 ## Development
 
