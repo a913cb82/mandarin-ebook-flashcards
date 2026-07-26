@@ -12,6 +12,7 @@ __pycache__/
 build/
 dist/
 *.tsv
+*.txt
 books/
 cards/
-data/deck_words.txt
+data/
