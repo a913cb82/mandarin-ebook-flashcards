@@ -1,16 +1,49 @@
 import json
 import os
 import random
-import time
+import subprocess
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import toml
-from google import genai
-from google.genai import types
+import tomli
 from tqdm import tqdm
 
 from pinyin import convert_pinyin
+
+ROLE_PATH = Path.home() / ".config" / "aichat" / "roles" / "flashcard.md"
+TOML_PATH = Path(__file__).parent.parent / "system_prompt.toml"
+
+
+def build_role(
+    toml_path: Path = TOML_PATH,
+    role_path: Path = ROLE_PATH,
+) -> None:
+    """Generate aichat role file from system_prompt.toml."""
+    with open(toml_path, "rb") as f:
+        data = tomli.load(f)
+
+    parts = [
+        "---",
+        "temperature: 0",
+        "---",
+        data["system_prompt"].rstrip("\n"),
+    ]
+
+    for ex in data["examples"]:
+        parts.append("")
+        parts.append("### INPUT:")
+        parts.append(ex["input"])
+        parts.append("### OUTPUT:")
+        parsed = json.loads(ex["output"])
+        compact = json.dumps(
+            parsed, indent=None, ensure_ascii=False, separators=(",", ":")
+        )
+        parts.append(f"```json\n{compact}\n```")
+
+    role_path.parent.mkdir(parents=True, exist_ok=True)
+    role_path.write_text("\n".join(parts) + "\n")
+
 
 EXPECTED_COLUMNS = [
     "hanzi",
@@ -49,7 +82,6 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
             print(f"Word {word} not in sentence: {card_dict['sentencehanzi']}")
         return False
 
-    # Pinyin consistency check
     tm_parts = [
         p.strip()
         for p in str(card_dict["pinyin"])
@@ -76,7 +108,6 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
                 print(msg)
             return False
 
-    # Structure check (semicolons vs pipes)
     def get_struct(s: Any) -> list[int]:
         return [len(p.split(";")) for p in str(s).split("|")]
 
@@ -101,27 +132,55 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
     return True
 
 
+def parse_aichat_response(stdout: bytes) -> list[dict[str, Any]]:
+    """Parse aichat stdout to extract flashcard JSON array.
+
+    Handles thinking text that may precede the JSON.
+    """
+    text = stdout.decode()
+    start = text.find("[")
+    end = text.rfind("]") + 1
+    if start == -1 or end == 0:
+        return []
+    try:
+        result = json.loads(text[start:end])
+        return result if isinstance(result, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def run_aichat(
+    words: list[str],
+    model: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Run aichat subprocess for a batch of words.
+
+    Returns (parsed_cards, stderr_text or None).
+    """
+    batch_text = "\n".join(words)
+    result = subprocess.run(
+        ["aichat", "-r", "flashcard", "-m", model, batch_text],
+        capture_output=True,
+    )
+    stderr_text = result.stderr.decode() if result.returncode != 0 else None
+    if result.returncode != 0:
+        return [], stderr_text
+    return parse_aichat_response(result.stdout), stderr_text
+
+
 def create_flashcards(
     words: list[str],
     cache_dir: str = ".flashcard_cache",
-    initial_batch_size: int = 100,
-    batch_size_multiplier: float = 2.0,
+    batch_size: int = 20,
     retries: int = 3,
-    model: str = "gemini-3.5-flash",
+    model: str = "ollama:qwen3:8b",
     verbose: bool = False,
-    cache_ttl: str = "43200s",
-    use_gemini_cache: bool = False,
 ) -> pd.DataFrame:
-    """Creates flashcards using Gemini API with caching and batching."""
+    """Creates flashcards via aichat subprocess."""
     os.makedirs(cache_dir, exist_ok=True)
-    with open("system_prompt.toml") as f:
-        prompt_data = toml.load(f)
 
-    system_prompt = prompt_data["system_prompt"]
-    examples = prompt_data["examples"]
-
-    flashcards_map = {}
-    to_process = []
+    flashcards_map: dict[str, dict[str, Any]] = {}
+    to_process: list[str] = []
 
     pbar = tqdm(total=len(words), desc="Creating flashcards")
 
@@ -148,170 +207,51 @@ def create_flashcards(
         )
 
     random.shuffle(to_process)
-    client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-
-    cached_content_name: str | None = None
-    if use_gemini_cache:
-        cache_contents = []
-        for ex in examples:
-            cache_contents.append(
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text=ex["input"])],
-                )
-            )
-            cache_contents.append(
-                types.Content(
-                    role="model",
-                    parts=[types.Part.from_text(text=ex["output"])],
-                )
-            )
-        cached = client.caches.create(
-            model=model,
-            config=types.CreateCachedContentConfig(
-                display_name="mandarin-flashcard-prompt",
-                system_instruction=system_prompt,
-                contents=cache_contents,
-                ttl=cache_ttl,
-            ),
-        )
-        cached_content_name = cached.name
-
-    batch_size = initial_batch_size
-    max_batch_size = 1000000
     retry_counts = dict.fromkeys(to_process, 0)
 
     while to_process:
-        pbar.set_postfix(batch_size=batch_size)
         batch = to_process[:batch_size]
-        to_process = to_process[batch_size:]
+        del to_process[:batch_size]
 
-        try:
-            config_kwargs: dict[str, Any] = {
-                "response_mime_type": "application/json",
-                "response_schema": types.Schema(
-                    type=types.Type.ARRAY,
-                    items=types.Schema(
-                        type=types.Type.OBJECT,
-                        properties={
-                            k: types.Schema(type=types.Type.STRING)
-                            for k in EXPECTED_COLUMNS
-                        },
-                        required=EXPECTED_COLUMNS,
-                    ),
-                ),
-            }
-            if use_gemini_cache:
-                config_kwargs["cached_content"] = cached_content_name
+        cards, stderr_text = run_aichat(batch, model)
+
+        if stderr_text and verbose:
+            print(f"aichat stderr: {stderr_text}")
+
+        res_map = {c["hanzi"]: c for c in cards}
+        succeeded = 0
+        for word in batch:
+            if word in res_map and validate_flashcard(res_map[word], word):
+                flashcards_map[word] = res_map[word]
+                with open(os.path.join(cache_dir, f"{word}.json"), "w") as f:
+                    json.dump(res_map[word], f)
+                pbar.update(1)
+                succeeded += 1
             else:
-                config_kwargs["system_instruction"] = system_prompt
-            config = types.GenerateContentConfig(**config_kwargs)
-
-            contents = []
-            if not use_gemini_cache:
-                for ex in examples:
-                    contents.append(
-                        types.Content(
-                            role="user",
-                            parts=[types.Part.from_text(text=ex["input"])],
-                        )
-                    )
-                    contents.append(
-                        types.Content(
-                            role="model",
-                            parts=[types.Part.from_text(text=ex["output"])],
-                        )
-                    )
-            contents.append(
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text="..\n".join(batch))],
-                )
-            )
-
-            response = client.models.generate_content(
-                model=model, contents=contents, config=config
-            )
-            if response.text is None:
-                raise ValueError("API returned empty response text")
-
-            results = json.loads(response.text)
-            res_map = {r["hanzi"]: r for r in results}
-
-            succeeded = 0
-            for word in batch:
-                if word in res_map and validate_flashcard(res_map[word], word):
-                    flashcards_map[word] = res_map[word]
-                    with open(
-                        os.path.join(cache_dir, f"{word}.json"), "w"
-                    ) as f:
-                        json.dump(res_map[word], f)
-                    pbar.update(1)
-                    succeeded += 1
+                retry_counts[word] += 1
+                if verbose:
+                    print(f"Retry {retry_counts[word]}/{retries} for: {word}")
+                if retry_counts[word] < retries:
+                    to_process.append(word)
                 else:
-                    retry_counts[word] += 1
                     if verbose:
                         print(
-                            f"Retry {retry_counts[word]}/{retries} for: {word}"
+                            f"Failed to create valid flashcard"
+                            f" for word: {word}"
                         )
-                    if retry_counts[word] < retries:
-                        to_process.append(word)
-                    else:
-                        if verbose:
-                            print(
-                                f"Failed to create valid flashcard "
-                                f"for word: {word}"
-                            )
-                        pbar.update(1)
+                    pbar.update(1)
 
-            if succeeded > len(batch) / 2:
-                new_batch_size = int(
-                    min(
-                        (batch_size + max_batch_size) // 2,
-                        batch_size * batch_size_multiplier,
-                    )
-                )
-                if verbose:
-                    print(f"increasing batch size to {new_batch_size}")
-                batch_size = new_batch_size
-            else:
-                if verbose:
-                    print(
-                        f"decreasing batch size to "
-                        f"{int(max(1, batch_size // batch_size_multiplier))}"
-                    )
-                batch_size = int(max(1, batch_size // batch_size_multiplier))
-
-        except Exception as e:
+        # Adaptive batch sizing (TODO: tune for subprocess overhead)
+        if succeeded > len(batch) / 2:
+            new_batch_size = min(batch_size * 2, batch_size + 100)
             if verbose:
-                print(f"Exception occurred: {e}")
-            if "429" in str(e):
-                time.sleep(30)
-                # Shuffle batch back into to_process to avoid hitting
-                # the same block if it's somehow problematic
-                to_process.extend(batch)
-                random.shuffle(to_process)
-            else:
-                if verbose:
-                    print(f"Error: {e}")
-                for word in batch:
-                    retry_counts[word] += 1
-                    if verbose:
-                        print(
-                            f"Retry {retry_counts[word]}/{retries} "
-                            f"for: {word} (after error)"
-                        )
-                    if retry_counts[word] < retries:
-                        to_process.append(word)
-                    else:
-                        pbar.update(1)
-                if verbose:
-                    print(
-                        f"decreasing batch size to "
-                        f"{int(max(1, batch_size // batch_size_multiplier))}"
-                    )
-                max_batch_size = batch_size
-                batch_size = int(max(1, batch_size // batch_size_multiplier))
+                print(f"increasing batch size to {new_batch_size}")
+            batch_size = new_batch_size
+        else:
+            new_batch_size = max(1, batch_size // 2)
+            if verbose:
+                print(f"decreasing batch size to {new_batch_size}")
+            batch_size = new_batch_size
 
     pbar.close()
     final_list = [flashcards_map[w] for w in words if w in flashcards_map]
@@ -321,7 +261,6 @@ def create_flashcards(
 def save_flashcards(flashcards: pd.DataFrame, file_path: str) -> None:
     """Saves flashcards to a TSV file."""
     if not flashcards.empty:
-        # Ensure no tabs in content to avoid breaking TSV format
         flashcards_clean = flashcards[EXPECTED_COLUMNS].copy()
         for col in EXPECTED_COLUMNS:
             flashcards_clean[col] = flashcards_clean[col].apply(

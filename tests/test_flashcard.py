@@ -1,14 +1,36 @@
 import json
+import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
+import tomli
 
 from flashcard import (
     EXPECTED_COLUMNS,
+    TOML_PATH,
     create_flashcards,
+    parse_aichat_response,
     save_flashcards,
     validate_flashcard,
 )
+
+
+def _make_aichat_stdout(cards: list[dict]) -> bytes:
+    """Build fake aichat stdout with optional thinking text."""
+    thinking = "<think>Okay, I need to generate flashcards.</think>\n\n"
+    return (thinking + json.dumps(cards)).encode()
+
+
+def _make_run_result(
+    stdout: bytes, returncode: int = 0, stderr: bytes = b""
+) -> MagicMock:
+    result = MagicMock()
+    result.stdout = stdout
+    result.stderr = stderr
+    result.returncode = returncode
+    return result
 
 
 def test_save_flashcards_with_tabs(tmp_path):
@@ -17,7 +39,7 @@ def test_save_flashcards_with_tabs(tmp_path):
         "hanzi": "你好",
         "pinyin": "ní hǎo",
         "pinyinnumbered": "ni2 hao3",
-        "definition": "hello\tworld",  # Tab here
+        "definition": "hello\tworld",
         "partofspeech": "greeting",
         "sentencehanzi": "你好吗？",
         "sentencepinyin": "sp",
@@ -31,7 +53,7 @@ def test_save_flashcards_with_tabs(tmp_path):
     for line in lines:
         parts = line.split("\t")
         assert len(parts) == len(EXPECTED_COLUMNS)
-        assert "hello world" in line  # Tab replaced by space
+        assert "hello world" in line
 
 
 def test_validate_flashcard():
@@ -79,233 +101,170 @@ def test_validate_flashcard_failures():
         "sentencetranslation": "How are you?",
     }
 
-    # Hanzi mismatch
     card = base_card.copy()
     card["hanzi"] = "再见"
     assert validate_flashcard(card, "你好") is False
 
-    # Pinyin mismatch
     card = base_card.copy()
-    card["pinyin"] = "nǐ hǎo"  # Tone mark 3 vs 2
+    card["pinyin"] = "nǐ hǎo"
     assert validate_flashcard(card, "你好") is False
 
-    # Empty value
     card = base_card.copy()
     card["definition"] = ""
     assert validate_flashcard(card, "你好") is False
 
-    # Word not in sentence
     card = base_card.copy()
     card["sentencehanzi"] = "我很好。"
     assert validate_flashcard(card, "你好") is False
 
-    # Pipe count mismatch
     card = base_card.copy()
     card["pinyin"] = "ní hǎo | nǐ hǎo"
-    card["definition"] = "hello"  # Only 1 definition for 2 pinyin
+    card["definition"] = "hello"
     assert validate_flashcard(card, "你好") is False
 
-    # Semicolon structure mismatch
     card = base_card.copy()
     card["pinyin"] = "ní; hǎo"
-    card["pinyinnumbered"] = "ni2 hao3"  # No semicolon here
+    card["pinyinnumbered"] = "ni2 hao3"
     assert validate_flashcard(card, "你好") is False
 
 
-@patch("random.shuffle")
-@patch("google.genai.Client")
-def test_create_flashcards_shuffles_and_preserves_order(
-    mock_client, mock_shuffle, tmp_path
-):
-    words = ["你好", "世界"]
-    mock_client.return_value.models.generate_content.return_value = MagicMock(
-        text=json.dumps(
-            [
-                {
-                    "hanzi": "你好",
-                    "pinyin": "ní hǎo",
-                    "pinyinnumbered": "ni2 hao3",
-                    "definition": "hello",
-                    "partofspeech": "noun",
-                    "sentencehanzi": "你好世界",
-                    "sentencepinyin": "Ní hǎo shì jiè.",
-                    "sentencetranslation": "Hello world.",
-                },
-                {
-                    "hanzi": "世界",
-                    "pinyin": "shì jiè",
-                    "pinyinnumbered": "shi4 jie4",
-                    "definition": "world",
-                    "partofspeech": "noun",
-                    "sentencehanzi": "你好世界",
-                    "sentencepinyin": "Ní hǎo shì jiè.",
-                    "sentencetranslation": "Hello world.",
-                },
-            ]
-        )
-    )
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
+def test_parse_aichat_response_valid():
+    cards = [
+        {
+            "hanzi": "你好",
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
+            "definition": "hello",
+            "partofspeech": "greeting",
+            "sentencehanzi": "你好吗？",
+            "sentencepinyin": "Nǐ hǎo ma?",
+            "sentencetranslation": "How are you?",
+        }
+    ]
+    stdout = json.dumps(cards).encode()
+    result = parse_aichat_response(stdout)
+    assert result == cards
+
+
+def test_parse_aichat_response_with_thinking():
+    cards = [{"hanzi": "你好"}]
+    stdout = _make_aichat_stdout(cards)
+    result = parse_aichat_response(stdout)
+    assert result == cards
+
+
+def test_parse_aichat_response_no_json():
+    stdout = b"just some text with no json"
+    result = parse_aichat_response(stdout)
+    assert result == []
+
+
+def test_parse_aichat_response_invalid_json():
+    stdout = b"text before [invalid json] text after"
+    result = parse_aichat_response(stdout)
+    assert result == []
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_basic(mock_run, tmp_path):
+    word = "你好"
+    cards = [
+        {
+            "hanzi": word,
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
+            "definition": "hello",
+            "partofspeech": "greeting",
+            "sentencehanzi": "你好吗？",
+            "sentencepinyin": "Nǐ hǎo ma?",
+            "sentencetranslation": "How are you?",
+        }
+    ]
+    mock_run.return_value = _make_run_result(_make_aichat_stdout(cards))
+
     flashcards = create_flashcards(
-        words,
-        initial_batch_size=2,
-        cache_dir=str(tmp_path),
-        use_gemini_cache=True,
+        [word], cache_dir=str(tmp_path), batch_size=1
     )
-    mock_shuffle.assert_called_once()
+    assert len(flashcards) == 1
+    assert flashcards.iloc[0]["hanzi"] == word
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_multiple_words(mock_run, tmp_path):
+    words = ["你好", "世界"]
+    cards = [
+        {
+            "hanzi": "你好",
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
+            "definition": "hello",
+            "partofspeech": "greeting",
+            "sentencehanzi": "你好世界",
+            "sentencepinyin": "Nǐ hǎo shì jiè.",
+            "sentencetranslation": "Hello world.",
+        },
+        {
+            "hanzi": "世界",
+            "pinyin": "shì jiè",
+            "pinyinnumbered": "shi4 jie4",
+            "definition": "world",
+            "partofspeech": "noun",
+            "sentencehanzi": "你好世界",
+            "sentencepinyin": "Nǐ hǎo shì jiè.",
+            "sentencetranslation": "Hello world.",
+        },
+    ]
+    mock_run.return_value = _make_run_result(_make_aichat_stdout(cards))
+
+    flashcards = create_flashcards(
+        words, cache_dir=str(tmp_path), batch_size=2
+    )
     assert set(flashcards["hanzi"].tolist()) == set(words)
 
 
-@patch("google.genai.Client")
-def test_batch_size_doubles_on_success(mock_client, tmp_path):
-    words = [f"word{i}" for i in range(4)]
-
-    def side_effect(*args, **kwargs):
-        text = kwargs["contents"][-1].parts[0].text
-        batch = text.split("..")
-        return MagicMock(
-            text=json.dumps(
-                [
-                    {
-                        "hanzi": w,
-                        "pinyin": "hǎo",
-                        "pinyinnumbered": "hao3",
-                        "definition": "d",
-                        "partofspeech": "n",
-                        "sentencehanzi": f"s {w}",
-                        "sentencepinyin": "sp",
-                        "sentencetranslation": "st",
-                    }
-                    for w in batch
-                ]
-            )
-        )
-
-    mock_client.return_value.models.generate_content.side_effect = side_effect
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
-    with patch("builtins.print") as mock_print:
-        create_flashcards(
-            words,
-            initial_batch_size=2,
-            cache_dir=str(tmp_path),
-            verbose=True,
-            use_gemini_cache=True,
-        )
-        increase_calls = [
-            c
-            for c in mock_print.mock_calls
-            if "increasing batch size" in str(c)
-        ]
-        assert len(increase_calls) > 0
-
-
-@patch("google.genai.Client")
-def test_batch_size_decreases_on_failure(mock_client, tmp_path):
-    words = [f"word{i}" for i in range(4)]
-
-    # Mock success for first batch, then fail validation for second
-    responses = [
-        json.dumps(
-            [
-                {
-                    "hanzi": w,
-                    "pinyin": "hǎo",
-                    "pinyinnumbered": "hao3",
-                    "definition": "d",
-                    "partofspeech": "n",
-                    "sentencehanzi": f"s {w}",
-                    "sentencepinyin": "sp",
-                    "sentencetranslation": "st",
-                }
-                for w in ["word0", "word1"]
-            ]
-        ),
-        json.dumps([]),  # Empty results will fail validation/succeeded check
-    ]
-    mock_client.return_value.models.generate_content.side_effect = [
-        MagicMock(text=r) for r in responses
-    ]
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
-    with patch("builtins.print") as mock_print:
-        create_flashcards(
-            words,
-            initial_batch_size=2,
-            cache_dir=str(tmp_path),
-            verbose=True,
-            use_gemini_cache=True,
-        )
-        decrease_calls = [
-            c
-            for c in mock_print.mock_calls
-            if "decreasing batch size" in str(c)
-        ]
-        assert len(decrease_calls) > 0
-
-
-@patch("time.sleep")
-@patch("google.genai.Client")
-def test_create_flashcards_handles_429(mock_client, mock_sleep, tmp_path):
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_retries_on_invalid(mock_run, tmp_path):
     word = "你好"
-    # First call returns 429 error, second returns success
-    mock_client.return_value.models.generate_content.side_effect = [
-        Exception("Resource has been exhausted (e.g. check quota). [429]"),
-        MagicMock(
-            text=json.dumps(
-                [
-                    {
-                        "hanzi": word,
-                        "pinyin": "ní hǎo",
-                        "pinyinnumbered": "ni2 hao3",
-                        "definition": "h",
-                        "partofspeech": "n",
-                        "sentencehanzi": "你好吗？",
-                        "sentencepinyin": "sp",
-                        "sentencetranslation": "st",
-                    }
-                ]
-            )
-        ),
+    valid_card = {
+        "hanzi": word,
+        "pinyin": "ní hǎo",
+        "pinyinnumbered": "ni2 hao3",
+        "definition": "hello",
+        "partofspeech": "greeting",
+        "sentencehanzi": "你好吗？",
+        "sentencepinyin": "Nǐ hǎo ma?",
+        "sentencetranslation": "How are you?",
+    }
+    invalid_card = {"hanzi": "wrong"}
+    mock_run.side_effect = [
+        _make_run_result(_make_aichat_stdout([invalid_card])),
+        _make_run_result(_make_aichat_stdout([valid_card])),
     ]
 
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
-    create_flashcards(
-        [word],
-        initial_batch_size=1,
-        cache_dir=str(tmp_path),
-        use_gemini_cache=True,
+    flashcards = create_flashcards(
+        [word], cache_dir=str(tmp_path), batch_size=1, retries=2
     )
-    assert mock_sleep.called
-    assert mock_client.return_value.models.generate_content.call_count == 2
+    assert len(flashcards) == 1
+    assert mock_run.call_count == 2
 
 
-@patch("google.genai.Client")
-def test_create_flashcards_hits_max_retries(mock_client, tmp_path):
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_hits_max_retries(mock_run, tmp_path):
     word = "你好"
-    # Always return invalid data
-    mock_client.return_value.models.generate_content.return_value = MagicMock(
-        text=json.dumps([{"hanzi": "wrong"}])
+    invalid_card = {"hanzi": "wrong"}
+    mock_run.return_value = _make_run_result(
+        _make_aichat_stdout([invalid_card])
     )
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
+
     with patch("builtins.print") as mock_print:
         flashcards = create_flashcards(
             [word],
-            initial_batch_size=1,
-            retries=2,
             cache_dir=str(tmp_path),
+            batch_size=1,
+            retries=2,
             verbose=True,
-            use_gemini_cache=True,
         )
         assert flashcards.empty
-        # Check for failure message
         failure_msg = f"Failed to create valid flashcard for word: {word}"
         failure_calls = [
             c for c in mock_print.mock_calls if failure_msg in str(c)
@@ -313,8 +272,40 @@ def test_create_flashcards_hits_max_retries(mock_client, tmp_path):
         assert len(failure_calls) > 0
 
 
-@patch("google.genai.Client")
-def test_create_flashcards_with_caching(mock_client, tmp_path):
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_handles_nonzero_exit(mock_run, tmp_path):
+    word = "你好"
+    valid_card = {
+        "hanzi": word,
+        "pinyin": "ní hǎo",
+        "pinyinnumbered": "ni2 hao3",
+        "definition": "h",
+        "partofspeech": "n",
+        "sentencehanzi": "你好吗？",
+        "sentencepinyin": "sp",
+        "sentencetranslation": "st",
+    }
+    mock_run.side_effect = [
+        _make_run_result(
+            stdout=b"",
+            returncode=1,
+            stderr=b"Error: rate limited",
+        ),
+        _make_run_result(_make_aichat_stdout([valid_card])),
+    ]
+
+    flashcards = create_flashcards(
+        [word],
+        cache_dir=str(tmp_path),
+        batch_size=1,
+        retries=2,
+    )
+    assert len(flashcards) == 1
+    assert mock_run.call_count == 2
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_with_caching(mock_run, tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     word = "你好"
@@ -328,24 +319,83 @@ def test_create_flashcards_with_caching(mock_client, tmp_path):
         "sentencepinyin": "sp",
         "sentencetranslation": "st",
     }
-    mock_client.return_value.models.generate_content.return_value = MagicMock(
-        text=json.dumps([card])
-    )
-    cache_mock = MagicMock()
-    cache_mock.name = "cachedContents/abc123"
-    mock_client.return_value.caches.create.return_value = cache_mock
-    create_flashcards(
-        [word],
-        initial_batch_size=1,
-        cache_dir=str(cache_dir),
-        use_gemini_cache=True,
-    )
-    assert mock_client.return_value.models.generate_content.call_count == 1
+    mock_run.return_value = _make_run_result(_make_aichat_stdout([card]))
 
-    create_flashcards(
-        [word],
-        initial_batch_size=1,
-        cache_dir=str(cache_dir),
-        use_gemini_cache=True,
+    create_flashcards([word], batch_size=1, cache_dir=str(cache_dir))
+    assert mock_run.call_count == 1
+
+    create_flashcards([word], batch_size=1, cache_dir=str(cache_dir))
+    assert mock_run.call_count == 1
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_preserves_output_order(mock_run, tmp_path):
+    words = ["你好", "世界"]
+    cards = [
+        {
+            "hanzi": "世界",
+            "pinyin": "shì jiè",
+            "pinyinnumbered": "shi4 jie4",
+            "definition": "world",
+            "partofspeech": "noun",
+            "sentencehanzi": "你好世界",
+            "sentencepinyin": "Nǐ hǎo shì jiè.",
+            "sentencetranslation": "Hello world.",
+        },
+        {
+            "hanzi": "你好",
+            "pinyin": "ní hǎo",
+            "pinyinnumbered": "ni2 hao3",
+            "definition": "hello",
+            "partofspeech": "greeting",
+            "sentencehanzi": "你好世界",
+            "sentencepinyin": "Nǐ hǎo shì jiè.",
+            "sentencetranslation": "Hello world.",
+        },
+    ]
+    mock_run.return_value = _make_run_result(_make_aichat_stdout(cards))
+
+    flashcards = create_flashcards(
+        words, cache_dir=str(tmp_path), batch_size=2
     )
-    assert mock_client.return_value.models.generate_content.call_count == 1
+    assert flashcards["hanzi"].tolist() == words
+
+
+# --- Manual integration test (not run by default) ---
+
+
+@pytest.mark.manual
+@pytest.mark.timeout(120)
+def test_manual_aichat_integration():
+    """Run a real aichat subprocess.
+
+    Run with:
+        pytest -m manual -s tests/test_flashcard.py
+        MANUAL_MODEL=gemini:gemini-3.6-flash \
+            pytest -m manual -s tests/test_flashcard.py
+    """
+    model = os.environ.get("MANUAL_MODEL", "ollama:qwen3:8b")
+    words = ["你好", "世界"]
+    with tempfile.TemporaryDirectory() as cache_dir:
+        cards = create_flashcards(
+            words,
+            cache_dir=cache_dir,
+            batch_size=2,
+            model=model,
+        )
+        print(cards.to_string())
+        assert len(cards) > 0
+        assert set(cards["hanzi"].tolist()) == set(words)
+
+
+def test_system_prompt_examples_validate():
+    """All example JSONs in system_prompt.toml must pass validation."""
+    with open(TOML_PATH, "rb") as f:
+        data = tomli.load(f)
+
+    for i, ex in enumerate(data["examples"]):
+        cards = json.loads(ex["output"])
+        for card in cards:
+            assert validate_flashcard(card, card["hanzi"]), (
+                f"Example {i + 1}: {card['hanzi']} failed validation"
+            )

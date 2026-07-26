@@ -6,12 +6,11 @@ authors = [{ name = "Alex B" }]
 dependencies = [
     "ebooklib",
     "jieba",
-    "google-genai",
     "pandas",
     "beautifulsoup4",
     "python-dotenv",
+    "tomli",
     "tqdm",
-    "toml",
 ]
 
 [project.optional-dependencies]
@@ -21,7 +20,6 @@ dev = [
     "pytest-timeout",
     "ruff",
     "mypy",
-    "types-toml",
     "pandas-stubs",
     "types-beautifulsoup4",
     "types-tqdm",
@@ -47,6 +45,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-W error --disable-socket"
+addopts = "-W error --disable-socket -m 'not manual'"
 timeout = 5
 pythonpath = ["src"]
+markers = [
+    "manual: marks tests that call real external services",
+]

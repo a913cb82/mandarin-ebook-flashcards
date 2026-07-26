@@ -1,41 +1,22 @@
-system_prompt = """# Purpose
-You are a Mandarin Chinese flashcard creator. Your purpose is to generate JSON formatted flashcards from a list of Chinese characters and/or words.
+system_prompt = """You are a Mandarin Chinese flashcard creator. Given a comma-separated list of Chinese words, output a JSON array of flashcard objects.
 
-# Goals
-* Generate a raw JSON list of objects representing flashcards from a comma-separated list of Chinese vocabulary.
-* Provide accurate and complete data for each flashcard, following the specific formatting rules below.
-* Do not include any conversational text or explanations. Return only the raw JSON.
+Output only raw JSON. Each object must have these keys: hanzi, pinyin, pinyinnumbered, definition, partofspeech, sentencehanzi, sentencepinyin, sentencetranslation.
 
-# Rules and Formatting
-
-1.  **JSON Structure**: Each object in the list must contain these keys: "hanzi", "pinyin", "pinyinnumbered", "definition", "partofspeech", "sentencehanzi", "sentencepinyin", "sentencetranslation".
-
-2.  **Pinyin Formatting**:
-    *   **`pinyin`**: Use standard tone marks (e.g., `hǎo`).
-    *   **`pinyinnumbered`**: Use numbers 1-4 for tones and 5 for the neutral tone (e.g., `hao3`).
-    *   The `pinyin` and `pinyinnumbered` fields must be consistent. For example, if `pinyin` is `nǐ hǎo`, `pinyinnumbered` must be `ni3 hao3`.
-    *   Separate every pinyin syllable with a space (e.g., `nǐ hǎo` and `ni3 hao3`).
-    *   Remove apostrophes used to separate syllables (e.g., `xī'ān` should be `xī ān`).
-    *   Reflect tone sandhi rules in the `pinyin` and `pinyinnumbered` fields (e.g., for `你好`, use `ní hǎo`, not `nǐ hǎo`).
-    *   Capitalize the first letter in `sentencepinyin` to follow standard pinyin sentence conventions, while keeping the main `pinyin` and `pinyinnumbered` fields in lowercase.
-
-3.  **Handling Multiple Readings and Definitions**:
-    *   If a character has multiple pronunciations for the same core meaning, separate the pinyin with a semicolon (`;`) in both `pinyin` and `pinyinnumbered` fields, and order by frequency (e.g., `pinyin` as `xuè; xiě` and `pinyinnumbered` as `xue4; xie3`).
-    *   If a word or character has distinct meanings, separate corresponding entries in `pinyin`, `pinyinnumbered`, `definition`, and `partofspeech` with a pipe (`|`). **It is crucial that the number of pipe-separated items is identical across these four fields.** Order by frequency of usage (e.g., `pinyin` as `xíng | háng` and `pinyinnumbered` as `xing2 | hang2`).
-    *   In cases where a distinct meaning has multiple pronunciations, combine separators as needed (e.g., `pinyin` as `jiě | jiè | xiè; jiě` and `pinyinnumbered` as `jie3 | jie4 | xie4; jie3`).
-    *   If a single meaning has several common English equivalents, separate them with semicolons in the `definition` field (e.g., `to open; to start; to drive`).
-
-4.  **Example Sentence**:
-    *   The sentence must be a common, natural-sounding example that is simple enough for a language learner.
-    *   The sentence must use the **primary (most frequent) definition** of the word or character.
-
-5.  **Multi-Character Words**:
-    *   For a multi-character word, the `pinyin`, `pinyinnumbered`, `definition`, and example sentence must apply to the word as a whole, not its individual characters. This is especially important for words where a character's pronunciation changes (e.g., `长大` with `pinyin` as `zhǎng dà` and `pinyinnumbered` as `zhang3 da4`).
-
+Rules:
+- pinyin: use tone marks (e.g. hǎo). pinyinnumbered: use numbers 1-4 for tones, 5 for neutral (e.g. hao3). Keep them consistent.
+- Separate syllables with spaces. Remove apostrophes (xī'ān → xī ān).
+- Apply tone sandhi (你好 → ní hǎo, not nǐ hǎo).
+- Capitalize first letter in sentencepinyin only.
+- For multiple pronunciations of the same meaning, use semicolons in pinyin and pinyinnumbered only (血: xuè; xiě).
+- For distinct meanings, use pipes across pinyin, pinyinnumbered, definition, and partofspeech. Pipe counts must match across all four (行: xíng | háng).
+- When a distinct meaning has multiple pronunciations, combine separators (解: jiě | jiè | xiè; jiě).
+- Separate English synonyms within one meaning with semicolons (to open; to start; to drive).
+- Use a simple, natural example sentence with the primary definition.
+- For multi-character words, treat the word as a unit (长大 → zhǎng dà, not individual characters).
 """
 
 [[examples]]
-input = "桌子,我们,吃,高兴,非常,在,和,的,个,马马虎虎,开,大夫,血,行,解"
+input = "桌子,我们,个,行,解,血,大夫,天安门,高兴,非常,马马虎虎,你好"
 output = """
 [
 {
@@ -59,66 +40,6 @@ output = """
 "sentencetranslation": "We are good friends."
 },
 {
-"hanzi": "吃",
-"pinyin": "chī",
-"pinyinnumbered": "chi1",
-"definition": "to eat",
-"partofspeech": "verb",
-"sentencehanzi": "我喜欢吃米饭。",
-"sentencepinyin": "Wǒ xǐ huān chī mǐ fàn.",
-"sentencetranslation": "I like to eat rice."
-},
-{
-"hanzi": "高兴",
-"pinyin": "gāo xìng",
-"pinyinnumbered": "gao1 xing4",
-"definition": "happy; glad",
-"partofspeech": "adjective",
-"sentencehanzi": "今天我很高兴。",
-"sentencepinyin": "Jīn tiān wó hěn gāo xìng.",
-"sentencetranslation": "I am very happy today."
-},
-{
-"hanzi": "非常",
-"pinyin": "fēi cháng",
-"pinyinnumbered": "fei1 chang2",
-"definition": "very; extremely",
-"partofspeech": "adverb",
-"sentencehanzi": "这个地方非常漂亮。",
-"sentencepinyin": "Zhè ge dì fang fēi cháng piào liang.",
-"sentencetranslation": "This place is extremely beautiful."
-},
-{
-"hanzi": "在",
-"pinyin": "zài",
-"pinyinnumbered": "zai4",
-"definition": "at; in; on",
-"partofspeech": "preposition",
-"sentencehanzi": "我的手机在桌子上。",
-"sentencepinyin": "Wǒ de shǒu jī zài zhuō zi shàng.",
-"sentencetranslation": "My phone is on the table."
-},
-{
-"hanzi": "和",
-"pinyin": "hé",
-"pinyinnumbered": "he2",
-"definition": "and; with",
-"partofspeech": "conjunction",
-"sentencehanzi": "我喜欢猫和狗。",
-"sentencepinyin": "Wǒ xǐ huān māo hé gǒu.",
-"sentencetranslation": "I like cats and dogs."
-},
-{
-"hanzi": "的",
-"pinyin": "de",
-"pinyinnumbered": "de5",
-"definition": "possessive particle; of",
-"partofspeech": "particle",
-"sentencehanzi": "这是我的书。",
-"sentencepinyin": "Zhè shì wǒ de shū.",
-"sentencetranslation": "This is my book."
-},
-{
 "hanzi": "个",
 "pinyin": "ge",
 "pinyinnumbered": "ge5",
@@ -127,46 +48,6 @@ output = """
 "sentencehanzi": "我有一个苹果。",
 "sentencepinyin": "Wǒ yǒu yí ge píng guǒ.",
 "sentencetranslation": "I have an apple."
-},
-{
-"hanzi": "马马虎虎",
-"pinyin": "mǎ mǎ hū hū",
-"pinyinnumbered": "ma3 ma3 hu1 hu1",
-"definition": "so-so; careless; casual",
-"partofspeech": "idiom",
-"sentencehanzi": "他这次考试的成绩马马虎虎。",
-"sentencepinyin": "Tā zhè cì kǎo shì de chéng jì mǎ mǎ hū hū.",
-"sentencetranslation": "His grade on this exam was just so-so."
-},
-{
-"hanzi": "开",
-"pinyin": "kāi | kāi",
-"pinyinnumbered": "kai1 | kai1",
-"definition": "to open; to start; to drive | carat (unit of purity for gold)",
-"partofspeech": "verb | measure word",
-"sentencehanzi": "请把门打开。",
-"sentencepinyin": "Qǐng bǎ mén dǎ kāi.",
-"sentencetranslation": "Please open the door."
-},
-{
-"hanzi": "大夫",
-"pinyin": "dài fu | dà fū",
-"pinyinnumbered": "dai4 fu5 | da4 fu1",
-"definition": "doctor | Grand Master (ancient official title)",
-"partofspeech": "noun | noun",
-"sentencehanzi": "他生病了，要去看大夫。",
-"sentencepinyin": "Tā shēng bìng le, yào qù kàn dài fu.",
-"sentencetranslation": "He is sick and needs to see a doctor."
-},
-{
-"hanzi": "血",
-"pinyin": "xuè; xiě",
-"pinyinnumbered": "xue4; xie3",
-"definition": "blood",
-"partofspeech": "noun",
-"sentencehanzi": "医生在给病人输血。",
-"sentencepinyin": "Yī shēng zài gěi bìng rén shū xuè.",
-"sentencetranslation": "The doctor is giving the patient a blood transfusion."
 },
 {
 "hanzi": "行",
@@ -187,6 +68,76 @@ output = """
 "sentencehanzi": "这个问题很难解决。",
 "sentencepinyin": "Zhè ge wèn tí hěn nán jiě jué.",
 "sentencetranslation": "This problem is hard to solve."
+},
+{
+"hanzi": "血",
+"pinyin": "xuè; xiě",
+"pinyinnumbered": "xue4; xie3",
+"definition": "blood",
+"partofspeech": "noun",
+"sentencehanzi": "医生在给病人输血。",
+"sentencepinyin": "Yī shēng zài gěi bìng rén shū xuè.",
+"sentencetranslation": "The doctor is giving the patient a blood transfusion."
+},
+{
+"hanzi": "大夫",
+"pinyin": "dài fu | dà fū",
+"pinyinnumbered": "dai4 fu5 | da4 fu1",
+"definition": "doctor | Grand Master (ancient official title)",
+"partofspeech": "noun | noun",
+"sentencehanzi": "他生病了，要去看大夫。",
+"sentencepinyin": "Tā shēng bìng le, yào qù kàn dài fu.",
+"sentencetranslation": "He is sick and needs to see a doctor."
+},
+{
+"hanzi": "天安门",
+"pinyin": "tiān ān mén",
+"pinyinnumbered": "tian1 an1 men2",
+"definition": "Tiananmen; the Gate of Heavenly Peace",
+"partofspeech": "noun",
+"sentencehanzi": "天安门广场非常大。",
+"sentencepinyin": "Tiān ān mén guǎng chǎng fēi cháng dà.",
+"sentencetranslation": "Tiananmen Square is very large."
+},
+{
+"hanzi": "高兴",
+"pinyin": "gāo xìng",
+"pinyinnumbered": "gao1 xing4",
+"definition": "happy; glad",
+"partofspeech": "adjective",
+"sentencehanzi": "今天我很高兴。",
+"sentencepinyin": "Jīn tiān wǒ hěn gāo xìng.",
+"sentencetranslation": "I am very happy today."
+},
+{
+"hanzi": "非常",
+"pinyin": "fēi cháng",
+"pinyinnumbered": "fei1 chang2",
+"definition": "very; extremely",
+"partofspeech": "adverb",
+"sentencehanzi": "这个地方非常漂亮。",
+"sentencepinyin": "Zhè ge dì fang fēi cháng piào liang.",
+"sentencetranslation": "This place is extremely beautiful."
+},
+{
+"hanzi": "马马虎虎",
+"pinyin": "mǎ mǎ hū hū",
+"pinyinnumbered": "ma3 ma3 hu1 hu1",
+"definition": "so-so; careless; casual",
+"partofspeech": "idiom",
+"sentencehanzi": "他这次考试的成绩马马虎虎。",
+"sentencepinyin": "Tā zhè cì kǎo shì de chéng jì mǎ mǎ hū hū.",
+"sentencetranslation": "His grade on this exam was just so-so."
+},
+{
+"hanzi": "你好",
+"pinyin": "ní hǎo",
+"pinyinnumbered": "ni2 hao3",
+"definition": "hello; hi",
+"partofspeech": "interjection",
+"sentencehanzi": "你好，很高兴认识你。",
+"sentencepinyin": "Ní hǎo, hěn gāo xìng rèn shi nǐ.",
+"sentencetranslation": "Hello, nice to meet you."
 }
 ]
 """

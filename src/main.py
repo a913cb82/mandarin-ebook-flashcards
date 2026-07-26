@@ -3,22 +3,26 @@ import os
 
 from dotenv import load_dotenv
 
-from flashcard import create_flashcards, save_flashcards
+from flashcard import build_role, create_flashcards, save_flashcards
 from utils import extract_vocabulary, load_subtlex_global_freqs, read_epub
 
 
 def main() -> None:
     """CLI entry point for mandarin-ebook-flashcards."""
     load_dotenv()
+    build_role()
     parser = argparse.ArgumentParser(
         description="Create Anki flashcards from Chinese text."
     )
     parser.add_argument("input_path", help="Path to input (EPUB or txt list)")
     parser.add_argument("output_path", help="Path to save flashcards (TSV)")
-    parser.add_argument("--initial-batch-size", type=int, default=100)
-    parser.add_argument("--batch-size-multiplier", type=float, default=2.0)
+    parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--retries", type=int, default=3)
-    parser.add_argument("--model", default="gemini-3.5-flash")
+    parser.add_argument(
+        "--model",
+        default="ollama:qwen3:8b",
+        help="aichat model (run 'aichat --list-models' to see options)",
+    )
     parser.add_argument("--vocab-only", action="store_true")
     parser.add_argument("--flashcards-only", action="store_true")
     parser.add_argument("--stop-words", help="Path to stop words file")
@@ -35,11 +39,6 @@ def main() -> None:
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--cache-dir", default=".flashcard_cache")
-    parser.add_argument(
-        "--use-gemini-cache",
-        action="store_true",
-        help="Enable Gemini context caching (reduces per-request tokens)",
-    )
     args = parser.parse_args()
 
     global_freqs = {}
@@ -71,12 +70,10 @@ def main() -> None:
     flashcards = create_flashcards(
         words,
         cache_dir=args.cache_dir,
-        initial_batch_size=args.initial_batch_size,
-        batch_size_multiplier=args.batch_size_multiplier,
+        batch_size=args.batch_size,
         retries=args.retries,
         model=args.model,
         verbose=args.verbose,
-        use_gemini_cache=args.use_gemini_cache,
     )
     save_flashcards(flashcards, args.output_path)
 
