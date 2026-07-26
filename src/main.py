@@ -30,7 +30,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        default="ollama:qwen3:8b",
+        default="gemini:gemini-3.5-flash-lite",
         help="aichat model (default: %(default)s)",
     )
     parser.add_argument(
@@ -64,13 +64,13 @@ def main() -> None:
     parser.add_argument(
         "--rpm",
         type=int,
-        default=10,
+        default=14,
         help="Requests per minute limit, 0=unlimited (default: %(default)s)",
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=1,
+        default=4,
         help="Concurrent threads (default: %(default)s)",
     )
     args = parser.parse_args()
