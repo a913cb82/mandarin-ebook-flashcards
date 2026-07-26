@@ -14,4 +14,4 @@ dist/
 *.tsv
 books/
 cards/
-data/
+data/deck_words.txt

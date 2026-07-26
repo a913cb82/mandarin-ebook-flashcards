@@ -10,7 +10,9 @@ import tomli
 from flashcard import (
     EXPECTED_COLUMNS,
     TOML_PATH,
+    RateLimiter,
     create_flashcards,
+    is_rate_limit_error,
     parse_aichat_response,
     save_flashcards,
     validate_flashcard,
@@ -242,7 +244,7 @@ def test_create_flashcards_retries_on_invalid(mock_run, tmp_path):
     ]
 
     flashcards = create_flashcards(
-        [word], cache_dir=str(tmp_path), batch_size=1, retries=2
+        [word], cache_dir=str(tmp_path), batch_size=1, retries=2, rpm=0
     )
     assert len(flashcards) == 1
     assert mock_run.call_count == 2
@@ -263,6 +265,7 @@ def test_create_flashcards_hits_max_retries(mock_run, tmp_path):
             batch_size=1,
             retries=2,
             verbose=True,
+            rpm=0,
         )
         assert flashcards.empty
         failure_msg = f"Failed to create valid flashcard for word: {word}"
@@ -299,6 +302,7 @@ def test_create_flashcards_handles_nonzero_exit(mock_run, tmp_path):
         cache_dir=str(tmp_path),
         batch_size=1,
         retries=2,
+        rpm=0,
     )
     assert len(flashcards) == 1
     assert mock_run.call_count == 2
@@ -359,6 +363,136 @@ def test_create_flashcards_preserves_output_order(mock_run, tmp_path):
         words, cache_dir=str(tmp_path), batch_size=2
     )
     assert flashcards["hanzi"].tolist() == words
+
+
+# --- Rate limit error detection ---
+
+
+def test_is_rate_limit_error_429():
+    assert is_rate_limit_error("Error 429: Too many requests") is True
+
+
+def test_is_rate_limit_error_resource_exhausted():
+    assert is_rate_limit_error("429 RESOURCE_EXHAUSTED") is True
+
+
+def test_is_rate_limit_error_gemini_message():
+    stderr = "Resource has been exhausted (e.g. check quota). (status: 429)"
+    assert is_rate_limit_error(stderr) is True
+
+
+def test_is_rate_limit_error_not_rate_limit():
+    assert is_rate_limit_error("Connection timeout") is False
+    assert is_rate_limit_error("") is False
+    assert is_rate_limit_error("Some other error") is False
+
+
+def test_is_rate_limit_error_rate_limit_text():
+    assert is_rate_limit_error("Rate limit exceeded") is True
+    assert is_rate_limit_error("rate_limit_reached") is True
+
+
+# --- RateLimiter ---
+
+
+def test_rate_limiter_allows_immediate_first_call():
+    limiter = RateLimiter(rpm=60)
+    import time
+
+    start = time.monotonic()
+    limiter.wait()
+    elapsed = time.monotonic() - start
+    assert elapsed < 0.1
+
+
+def test_rate_limiter_blocks_when_too_fast():
+    limiter = RateLimiter(rpm=60)  # 1 per second
+    limiter.wait()  # First call
+    with patch("flashcard.time.sleep") as mock_sleep:
+        limiter.wait()  # Should call sleep
+        mock_sleep.assert_called_once()
+        assert mock_sleep.call_args[0][0] >= 0.9
+
+
+def test_rate_limiter_disabled_when_rpm_zero():
+    limiter = RateLimiter(rpm=0)
+    import time
+
+    start = time.monotonic()
+    for _ in range(10):
+        limiter.wait()
+    elapsed = time.monotonic() - start
+    assert elapsed < 0.1
+
+
+# --- Multithreading ---
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_multithreaded(mock_run, tmp_path):
+    words = ["你好", "世界", "中国", "美国"]
+    cards = [
+        {
+            "hanzi": w,
+            "pinyin": f"{w[0]}i",
+            "pinyinnumbered": f"{w[0]}i",
+            "definition": f"word {w}",
+            "partofspeech": "n",
+            "sentencehanzi": f"{w}好",
+            "sentencepinyin": "sp",
+            "sentencetranslation": "st",
+        }
+        for w in words
+    ]
+    mock_run.return_value = _make_run_result(_make_aichat_stdout(cards))
+
+    flashcards = create_flashcards(
+        words,
+        cache_dir=str(tmp_path),
+        batch_size=2,
+        workers=2,
+        rpm=0,
+    )
+    assert len(flashcards) == 4
+    assert set(flashcards["hanzi"].tolist()) == set(words)
+
+
+@patch("flashcard.subprocess.run")
+def test_create_flashcards_rate_limit_detected(mock_run, tmp_path):
+    word = "你好"
+    valid_card = {
+        "hanzi": word,
+        "pinyin": "ní hǎo",
+        "pinyinnumbered": "ni2 hao3",
+        "definition": "hello",
+        "partofspeech": "greeting",
+        "sentencehanzi": "你好吗？",
+        "sentencepinyin": "Nǐ hǎo ma?",
+        "sentencetranslation": "How are you?",
+    }
+    mock_run.side_effect = [
+        _make_run_result(
+            stdout=b"",
+            returncode=1,
+            stderr=b"429 RESOURCE_EXHAUSTED",
+        ),
+        _make_run_result(_make_aichat_stdout([valid_card])),
+    ]
+
+    with patch("builtins.print") as mock_print:
+        flashcards = create_flashcards(
+            [word],
+            cache_dir=str(tmp_path),
+            batch_size=1,
+            retries=2,
+            rpm=0,
+            verbose=True,
+        )
+        assert len(flashcards) == 1
+        rate_limit_calls = [
+            c for c in mock_print.mock_calls if "RATE LIMITED" in str(c)
+        ]
+        assert len(rate_limit_calls) > 0
 
 
 # --- Manual integration test (not run by default) ---

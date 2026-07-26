@@ -39,6 +39,18 @@ def main() -> None:
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--cache-dir", default=".flashcard_cache")
+    parser.add_argument(
+        "--rpm",
+        type=int,
+        default=10,
+        help="Requests per minute limit (default: 10)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of concurrent workers (default: 1)",
+    )
     args = parser.parse_args()
 
     global_freqs = {}
@@ -74,6 +86,8 @@ def main() -> None:
         retries=args.retries,
         model=args.model,
         verbose=args.verbose,
+        rpm=args.rpm,
+        workers=args.workers,
     )
     save_flashcards(flashcards, args.output_path)
 

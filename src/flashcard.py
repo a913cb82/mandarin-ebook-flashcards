@@ -2,6 +2,8 @@ import json
 import os
 import random
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,27 @@ from pinyin import convert_pinyin
 
 ROLE_PATH = Path.home() / ".config" / "aichat" / "roles" / "flashcard.md"
 TOML_PATH = Path(__file__).parent.parent / "system_prompt.toml"
+
+
+class RateLimiter:
+    """Token bucket rate limiter for API calls."""
+
+    def __init__(self, rpm: int) -> None:
+        self.rpm = rpm
+        self.interval = 60.0 / rpm if rpm > 0 else 0.0
+        self.lock = threading.Lock()
+        self.last_call = 0.0
+
+    def wait(self) -> None:
+        """Block until a request slot is available."""
+        if self.rpm <= 0:
+            return
+        with self.lock:
+            now = time.monotonic()
+            wait_time = self.interval - (now - self.last_call)
+            if wait_time > 0:
+                time.sleep(wait_time)
+            self.last_call = time.monotonic()
 
 
 def build_role(
@@ -149,13 +172,33 @@ def parse_aichat_response(stdout: bytes) -> list[dict[str, Any]]:
         return []
 
 
+def is_rate_limit_error(stderr: str) -> bool:
+    """Check if stderr contains a rate limit error (429).
+
+    Detects:
+    - 429 (HTTP status)
+    - RESOURCE_EXHAUSTED (Gemini gRPC status)
+    - rate limit / rate_limit (generic)
+    - too many requests (generic)
+    """
+    lower = stderr.lower()
+    return (
+        "429" in lower
+        or "resource_exhausted" in lower
+        or "resource exhausted" in lower
+        or "rate limit" in lower
+        or "rate_limit" in lower
+        or "too many requests" in lower
+    )
+
+
 def run_aichat(
     words: list[str],
     model: str,
-) -> tuple[list[dict[str, Any]], str | None]:
+) -> tuple[list[dict[str, Any]], str | None, bool]:
     """Run aichat subprocess for a batch of words.
 
-    Returns (parsed_cards, stderr_text or None).
+    Returns (parsed_cards, stderr_text or None, is_rate_limit_error).
     """
     batch_text = "\n".join(words)
     result = subprocess.run(
@@ -163,9 +206,10 @@ def run_aichat(
         capture_output=True,
     )
     stderr_text = result.stderr.decode() if result.returncode != 0 else None
+    rate_limited = stderr_text is not None and is_rate_limit_error(stderr_text)
     if result.returncode != 0:
-        return [], stderr_text
-    return parse_aichat_response(result.stdout), stderr_text
+        return [], stderr_text, rate_limited
+    return parse_aichat_response(result.stdout), stderr_text, rate_limited
 
 
 def create_flashcards(
@@ -175,12 +219,18 @@ def create_flashcards(
     retries: int = 3,
     model: str = "ollama:qwen3:8b",
     verbose: bool = False,
+    rpm: int = 10,
+    workers: int = 1,
 ) -> pd.DataFrame:
     """Creates flashcards via aichat subprocess."""
     os.makedirs(cache_dir, exist_ok=True)
 
     flashcards_map: dict[str, dict[str, Any]] = {}
+    flashcards_lock = threading.Lock()
     to_process: list[str] = []
+    process_lock = threading.Lock()
+    retry_counts: dict[str, int] = {}
+    retry_lock = threading.Lock()
 
     pbar = tqdm(total=len(words), desc="Creating flashcards")
 
@@ -209,30 +259,37 @@ def create_flashcards(
     random.shuffle(to_process)
     retry_counts = dict.fromkeys(to_process, 0)
 
-    while to_process:
-        batch = to_process[:batch_size]
-        del to_process[:batch_size]
+    rate_limiter = RateLimiter(rpm)
+    batch_size_state = {"size": batch_size}
 
-        cards, stderr_text = run_aichat(batch, model)
+    def process_batch(batch: list[str]) -> None:
+        """Process a single batch of words."""
+        rate_limiter.wait()
+        cards, stderr_text, rate_limited = run_aichat(batch, model)
 
         if stderr_text and verbose:
-            print(f"aichat stderr: {stderr_text}")
+            prefix = "RATE LIMITED" if rate_limited else "aichat stderr"
+            print(f"{prefix}: {stderr_text}")
 
         res_map = {c["hanzi"]: c for c in cards}
         succeeded = 0
         for word in batch:
             if word in res_map and validate_flashcard(res_map[word], word):
-                flashcards_map[word] = res_map[word]
+                with flashcards_lock:
+                    flashcards_map[word] = res_map[word]
                 with open(os.path.join(cache_dir, f"{word}.json"), "w") as f:
                     json.dump(res_map[word], f)
                 pbar.update(1)
                 succeeded += 1
             else:
-                retry_counts[word] += 1
+                with retry_lock:
+                    retry_counts[word] += 1
+                    current_retry = retry_counts[word]
                 if verbose:
-                    print(f"Retry {retry_counts[word]}/{retries} for: {word}")
-                if retry_counts[word] < retries:
-                    to_process.append(word)
+                    print(f"Retry {current_retry}/{retries} for: {word}")
+                if current_retry < retries:
+                    with process_lock:
+                        to_process.append(word)
                 else:
                     if verbose:
                         print(
@@ -242,16 +299,38 @@ def create_flashcards(
                     pbar.update(1)
 
         # Adaptive batch sizing (TODO: tune for subprocess overhead)
-        if succeeded > len(batch) / 2:
-            new_batch_size = min(batch_size * 2, batch_size + 100)
-            if verbose:
-                print(f"increasing batch size to {new_batch_size}")
-            batch_size = new_batch_size
-        else:
-            new_batch_size = max(1, batch_size // 2)
-            if verbose:
-                print(f"decreasing batch size to {new_batch_size}")
-            batch_size = new_batch_size
+        with process_lock:
+            if succeeded > len(batch) / 2:
+                new_batch_size = min(
+                    batch_size_state["size"] * 2,
+                    batch_size_state["size"] + 100,
+                )
+                if verbose:
+                    print(f"increasing batch size to {new_batch_size}")
+                batch_size_state["size"] = new_batch_size
+            else:
+                new_batch_size = max(1, batch_size_state["size"] // 2)
+                if verbose:
+                    print(f"decreasing batch size to {new_batch_size}")
+                batch_size_state["size"] = new_batch_size
+
+    if workers <= 1:
+        # Single-threaded mode (original behavior)
+        while to_process:
+            with process_lock:
+                batch = to_process[: batch_size_state["size"]]
+                del to_process[: batch_size_state["size"]]
+            process_batch(batch)
+    else:
+        # Multi-threaded mode
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            while to_process:
+                with process_lock:
+                    batch = to_process[: batch_size_state["size"]]
+                    del to_process[: batch_size_state["size"]]
+                executor.submit(process_batch, batch)
 
     pbar.close()
     final_list = [flashcards_map[w] for w in words if w in flashcards_map]
