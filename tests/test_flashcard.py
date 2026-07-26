@@ -148,7 +148,10 @@ def test_create_flashcards_shuffles_and_preserves_order(
     cache_mock.name = "cachedContents/abc123"
     mock_client.return_value.caches.create.return_value = cache_mock
     flashcards = create_flashcards(
-        words, initial_batch_size=2, cache_dir=str(tmp_path)
+        words,
+        initial_batch_size=2,
+        cache_dir=str(tmp_path),
+        use_gemini_cache=True,
     )
     mock_shuffle.assert_called_once()
     assert set(flashcards["hanzi"].tolist()) == set(words)
@@ -185,7 +188,11 @@ def test_batch_size_doubles_on_success(mock_client, tmp_path):
     mock_client.return_value.caches.create.return_value = cache_mock
     with patch("builtins.print") as mock_print:
         create_flashcards(
-            words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
+            words,
+            initial_batch_size=2,
+            cache_dir=str(tmp_path),
+            verbose=True,
+            use_gemini_cache=True,
         )
         increase_calls = [
             c
@@ -226,7 +233,11 @@ def test_batch_size_decreases_on_failure(mock_client, tmp_path):
     mock_client.return_value.caches.create.return_value = cache_mock
     with patch("builtins.print") as mock_print:
         create_flashcards(
-            words, initial_batch_size=2, cache_dir=str(tmp_path), verbose=True
+            words,
+            initial_batch_size=2,
+            cache_dir=str(tmp_path),
+            verbose=True,
+            use_gemini_cache=True,
         )
         decrease_calls = [
             c
@@ -264,7 +275,12 @@ def test_create_flashcards_handles_429(mock_client, mock_sleep, tmp_path):
     cache_mock = MagicMock()
     cache_mock.name = "cachedContents/abc123"
     mock_client.return_value.caches.create.return_value = cache_mock
-    create_flashcards([word], initial_batch_size=1, cache_dir=str(tmp_path))
+    create_flashcards(
+        [word],
+        initial_batch_size=1,
+        cache_dir=str(tmp_path),
+        use_gemini_cache=True,
+    )
     assert mock_sleep.called
     assert mock_client.return_value.models.generate_content.call_count == 2
 
@@ -286,6 +302,7 @@ def test_create_flashcards_hits_max_retries(mock_client, tmp_path):
             retries=2,
             cache_dir=str(tmp_path),
             verbose=True,
+            use_gemini_cache=True,
         )
         assert flashcards.empty
         # Check for failure message
@@ -317,8 +334,18 @@ def test_create_flashcards_with_caching(mock_client, tmp_path):
     cache_mock = MagicMock()
     cache_mock.name = "cachedContents/abc123"
     mock_client.return_value.caches.create.return_value = cache_mock
-    create_flashcards([word], initial_batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(
+        [word],
+        initial_batch_size=1,
+        cache_dir=str(cache_dir),
+        use_gemini_cache=True,
+    )
     assert mock_client.return_value.models.generate_content.call_count == 1
 
-    create_flashcards([word], initial_batch_size=1, cache_dir=str(cache_dir))
+    create_flashcards(
+        [word],
+        initial_batch_size=1,
+        cache_dir=str(cache_dir),
+        use_gemini_cache=True,
+    )
     assert mock_client.return_value.models.generate_content.call_count == 1

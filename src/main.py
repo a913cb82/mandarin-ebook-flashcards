@@ -35,6 +35,11 @@ def main() -> None:
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--cache-dir", default=".flashcard_cache")
+    parser.add_argument(
+        "--use-gemini-cache",
+        action="store_true",
+        help="Enable Gemini context caching (reduces per-request tokens)",
+    )
     args = parser.parse_args()
 
     global_freqs = {}
@@ -71,6 +76,7 @@ def main() -> None:
         retries=args.retries,
         model=args.model,
         verbose=args.verbose,
+        use_gemini_cache=args.use_gemini_cache,
     )
     save_flashcards(flashcards, args.output_path)
 

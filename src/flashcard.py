@@ -110,6 +110,7 @@ def create_flashcards(
     model: str = "gemini-3.5-flash",
     verbose: bool = False,
     cache_ttl: str = "43200s",
+    use_gemini_cache: bool = False,
 ) -> pd.DataFrame:
     """Creates flashcards using Gemini API with caching and batching."""
     os.makedirs(cache_dir, exist_ok=True)
@@ -149,30 +150,32 @@ def create_flashcards(
     random.shuffle(to_process)
     client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
-    cache_contents = []
-    for ex in examples:
-        cache_contents.append(
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=ex["input"])],
+    cached_content_name: str | None = None
+    if use_gemini_cache:
+        cache_contents = []
+        for ex in examples:
+            cache_contents.append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text=ex["input"])],
+                )
             )
-        )
-        cache_contents.append(
-            types.Content(
-                role="model",
-                parts=[types.Part.from_text(text=ex["output"])],
+            cache_contents.append(
+                types.Content(
+                    role="model",
+                    parts=[types.Part.from_text(text=ex["output"])],
+                )
             )
+        cached = client.caches.create(
+            model=model,
+            config=types.CreateCachedContentConfig(
+                display_name="mandarin-flashcard-prompt",
+                system_instruction=system_prompt,
+                contents=cache_contents,
+                ttl=cache_ttl,
+            ),
         )
-    cached = client.caches.create(
-        model=model,
-        config=types.CreateCachedContentConfig(
-            display_name="mandarin-flashcard-prompt",
-            system_instruction=system_prompt,
-            contents=cache_contents,
-            ttl=cache_ttl,
-        ),
-    )
-    cached_content_name = cached.name
+        cached_content_name = cached.name
 
     batch_size = initial_batch_size
     max_batch_size = 1000000
@@ -184,9 +187,9 @@ def create_flashcards(
         to_process = to_process[batch_size:]
 
         try:
-            config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=types.Schema(
+            config_kwargs: dict[str, Any] = {
+                "response_mime_type": "application/json",
+                "response_schema": types.Schema(
                     type=types.Type.ARRAY,
                     items=types.Schema(
                         type=types.Type.OBJECT,
@@ -197,10 +200,28 @@ def create_flashcards(
                         required=EXPECTED_COLUMNS,
                     ),
                 ),
-                cached_content=cached_content_name,
-            )
+            }
+            if use_gemini_cache:
+                config_kwargs["cached_content"] = cached_content_name
+            else:
+                config_kwargs["system_instruction"] = system_prompt
+            config = types.GenerateContentConfig(**config_kwargs)
 
             contents = []
+            if not use_gemini_cache:
+                for ex in examples:
+                    contents.append(
+                        types.Content(
+                            role="user",
+                            parts=[types.Part.from_text(text=ex["input"])],
+                        )
+                    )
+                    contents.append(
+                        types.Content(
+                            role="model",
+                            parts=[types.Part.from_text(text=ex["output"])],
+                        )
+                    )
             contents.append(
                 types.Content(
                     role="user",
