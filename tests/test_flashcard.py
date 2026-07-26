@@ -12,6 +12,7 @@ from flashcard import (
     TOML_PATH,
     RateLimiter,
     create_flashcards,
+    is_quota_exhausted_error,
     is_rate_limit_error,
     parse_aichat_response,
     save_flashcards,
@@ -392,6 +393,14 @@ def test_is_rate_limit_error_rate_limit_text():
     assert is_rate_limit_error("rate_limit_reached") is True
 
 
+def test_is_quota_exhausted_error():
+    msg = "You exceeded your current quota, please check your plan"
+    assert is_quota_exhausted_error(msg) is True
+    assert is_quota_exhausted_error("RESOURCE_EXHAUSTED") is False
+    assert is_quota_exhausted_error("Rate limit exceeded") is False
+    assert is_quota_exhausted_error("") is False
+
+
 # --- RateLimiter ---
 
 
@@ -490,7 +499,7 @@ def test_create_flashcards_rate_limit_detected(mock_run, tmp_path):
         )
         assert len(flashcards) == 1
         rate_limit_calls = [
-            c for c in mock_print.mock_calls if "RATE LIMITED" in str(c)
+            c for c in mock_print.mock_calls if "429" in str(c)
         ]
         assert len(rate_limit_calls) > 0
 

@@ -13,6 +13,7 @@ build/
 dist/
 *.tsv
 *.txt
+!requirements.snapshot.txt
 books/
 cards/
 data/

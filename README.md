@@ -40,3 +40,18 @@ uvx ty check                  # typecheck
 
 - Python 3.10+
 - aichat installed and configured (`aichat --list-models`)
+
+## Data, books, and cache
+
+- `data/SUBTLEX-CH-WF`: SUBTLEX-CH word-frequency list (Cai & Brysbaert;
+  GBK-encoded, tab-separated, 3 header rows). Not in git (see `.gitignore`);
+  obtain it from the SUBTLEX-CH release and place it at this path
+  (override with `--global-freqs`). Used to rank vocabulary by global frequency.
+- `books/`: drop your `.epub` files here. Not in git; e.g.
+  `python src/main.py books/<name>.epub cards.tsv`.
+- `.flashcard_cache/`: per-word JSON cache (`{word}.json`, default `--cache-dir`).
+  Not in git. Safe to delete to force regeneration (stale entries are simply
+  re-fetched); `show-cache.sh` inspects it.
+
+Regenerate the pinned snapshot with `.venv/bin/pip freeze > requirements.snapshot.txt`.
+Copy `.env.example` to `.env` and fill in values.

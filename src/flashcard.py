@@ -204,9 +204,16 @@ def is_rate_limit_error(stderr: str) -> bool:
     )
 
 
+def is_quota_exhausted_error(stderr: str) -> bool:
+    """Check if stderr indicates the API quota is exhausted."""
+    lower = stderr.lower()
+    return "exceeded your current quota" in lower
+
+
 def run_aichat(
     words: list[str],
     model: str,
+    verbose: bool = False,
 ) -> tuple[list[dict[str, str]], str | None, bool]:
     """Run aichat subprocess for a batch of words.
 
@@ -217,11 +224,25 @@ def run_aichat(
         ["aichat", "-r", "flashcard", "-m", model, batch_text],
         capture_output=True,
     )
-    stderr_text = result.stderr.decode() if result.returncode != 0 else None
+    stdout_text = result.stdout.decode()
+    stderr_text = result.stderr.decode() or None
     rate_limited = stderr_text is not None and is_rate_limit_error(stderr_text)
+    if verbose:
+        print(
+            f"  aichat exit={result.returncode} "
+            f"stdout={len(stdout_text)}B stderr={len(stderr_text or '')}B"
+        )
+        if result.returncode != 0 and stderr_text:
+            print(f"  stderr: {stderr_text[:200]}")
+        if not rate_limited and stdout_text:
+            preview = stdout_text[:200].replace("\n", " ")
+            print(f"  stdout: {preview}...")
     if result.returncode != 0:
         return [], stderr_text, rate_limited
-    return parse_aichat_response(result.stdout), stderr_text, rate_limited
+    cards = parse_aichat_response(result.stdout)
+    if verbose:
+        print(f"  parsed {len(cards)} cards from batch of {len(words)}")
+    return cards, stderr_text, rate_limited
 
 
 def create_flashcards(
@@ -273,15 +294,25 @@ def create_flashcards(
 
     rate_limiter = RateLimiter(rpm)
     batch_size_state = {"size": batch_size}
+    abort = threading.Event()
 
     def process_batch(batch: list[str]) -> None:
         """Process a single batch of words."""
+        if abort.is_set():
+            return
         rate_limiter.wait()
-        cards, stderr_text, rate_limited = run_aichat(batch, model)
+        cards, stderr_text, _rate_limited = run_aichat(
+            batch, model, verbose=verbose
+        )
 
-        if stderr_text and verbose:
-            prefix = "RATE LIMITED" if rate_limited else "aichat stderr"
-            print(f"{prefix}: {stderr_text}")
+        if stderr_text and is_quota_exhausted_error(stderr_text):
+            abort.set()
+            pbar.close()
+            print(
+                "\nERROR: API quota exhausted. "
+                "Check your plan and billing details."
+            )
+            return
 
         res_map = {c["hanzi"]: c for c in cards}
         succeeded = 0
@@ -325,10 +356,17 @@ def create_flashcards(
                 if verbose:
                     print(f"decreasing batch size to {new_batch_size}")
                 batch_size_state["size"] = new_batch_size
+        if verbose:
+            with process_lock:
+                remaining = len(to_process)
+            print(
+                f"  batch done: {succeeded}/{len(batch)} ok, "
+                f"{remaining} remaining"
+            )
 
     if workers <= 1:
         # Single-threaded mode (original behavior)
-        while to_process:
+        while to_process and not abort.is_set():
             with process_lock:
                 batch = to_process[: batch_size_state["size"]]
                 del to_process[: batch_size_state["size"]]
@@ -338,13 +376,21 @@ def create_flashcards(
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            while to_process:
+            while to_process and not abort.is_set():
                 with process_lock:
                     batch = to_process[: batch_size_state["size"]]
                     del to_process[: batch_size_state["size"]]
                 executor.submit(process_batch, batch)
 
     pbar.close()
+    if abort.is_set():
+        remaining = len(to_process)
+        print(f"Aborted with {remaining} words remaining")
+        final_list = [flashcards_map[w] for w in words if w in flashcards_map]
+        return pd.DataFrame(final_list) if final_list else pd.DataFrame()
+    missing = len(words) - len(flashcards_map)
+    if missing > 0:
+        print(f"Failed to generate {missing} flashcards")
     final_list = [flashcards_map[w] for w in words if w in flashcards_map]
     return pd.DataFrame(final_list) if final_list else pd.DataFrame()
 
