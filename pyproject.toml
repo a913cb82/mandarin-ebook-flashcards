@@ -19,10 +19,7 @@ dev = [
     "pytest-socket",
     "pytest-timeout",
     "ruff",
-    "mypy",
-    "pandas-stubs",
-    "types-beautifulsoup4",
-    "types-tqdm",
+    "ty",
     "pre-commit",
 ]
 
@@ -32,16 +29,22 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4"]
+extend-select = ["ANN", "PYI"]
 ignore = []
+preview = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
 
 [tool.ruff.lint.isort]
 known-first-party = []
 
-[tool.mypy]
-python_version = "3.10"
-strict = true
-disallow_untyped_defs = true
-ignore_missing_imports = true
+[tool.ty.rules]
+missing-type-argument = "error"
+possibly-unresolved-reference = "error"
+
+[tool.ty.environment]
+python-version = "3.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -20,7 +20,7 @@ Run `python src/main.py --help` for all options and output format.
 pip install -e ".[dev]"       # install with dev deps
 pytest                        # run tests (no network)
 ruff check src                # lint
-mypy src                      # typecheck
+uvx ty check                  # typecheck
 ```
 
 ### How it works

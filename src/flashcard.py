@@ -5,7 +5,6 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import tomli
@@ -80,17 +79,30 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
+def validate_flashcard(
+    card: pd.Series | dict[str, str],
+    word: str,
+    verbose: int = 0,
+) -> bool:
     """Validates a flashcard's structure and content consistency."""
-    card_dict = card.to_dict() if isinstance(card, pd.Series) else card
+    if isinstance(card, pd.Series):
+        raw = card.to_dict()
+        card_dict: dict[str, str] = {}
+        for k, v in raw.items():
+            if v is None:
+                if verbose > 1:
+                    print(f"Empty or NaN values for {word}")
+                return False
+            card_dict[str(k)] = str(v)
+    else:
+        card_dict = card
 
     if not all(col in card_dict for col in EXPECTED_COLUMNS):
         if verbose > 1:
             print(f"Missing columns for {word}")
         return False
     if any(
-        pd.isna(card_dict.get(col))
-        or str(card_dict.get(col, "")).strip() == ""
+        card_dict.get(col) is None or card_dict.get(col, "").strip() == ""
         for col in EXPECTED_COLUMNS
     ):
         if verbose > 1:
@@ -107,14 +119,14 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
 
     tm_parts = [
         p.strip()
-        for p in str(card_dict["pinyin"])
+        for p in card_dict["pinyin"]
         .replace(";", "|")
         .replace("'", "")
         .split("|")
     ]
     n_parts = [
         p.strip()
-        for p in str(card_dict["pinyinnumbered"]).replace(";", "|").split("|")
+        for p in card_dict["pinyinnumbered"].replace(";", "|").split("|")
     ]
 
     if len(tm_parts) != len(n_parts):
@@ -131,8 +143,8 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
                 print(msg)
             return False
 
-    def get_struct(s: Any) -> list[int]:
-        return [len(p.split(";")) for p in str(s).split("|")]
+    def get_struct(s: str) -> list[int]:
+        return [len(p.split(";")) for p in s.split("|")]
 
     if get_struct(card_dict["pinyin"]) != get_struct(
         card_dict["pinyinnumbered"]
@@ -141,8 +153,8 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
             print(f"Structure mismatch for {word}")
         return False
 
-    def get_pipe_count(s: Any) -> int:
-        return len(str(s).split("|"))
+    def get_pipe_count(s: str) -> int:
+        return len(s.split("|"))
 
     if not (
         get_pipe_count(card_dict["pinyin"])
@@ -155,7 +167,7 @@ def validate_flashcard(card: Any, word: str, verbose: int = 0) -> bool:
     return True
 
 
-def parse_aichat_response(stdout: bytes) -> list[dict[str, Any]]:
+def parse_aichat_response(stdout: bytes) -> list[dict[str, str]]:
     """Parse aichat stdout to extract flashcard JSON array.
 
     Handles thinking text that may precede the JSON.
@@ -195,7 +207,7 @@ def is_rate_limit_error(stderr: str) -> bool:
 def run_aichat(
     words: list[str],
     model: str,
-) -> tuple[list[dict[str, Any]], str | None, bool]:
+) -> tuple[list[dict[str, str]], str | None, bool]:
     """Run aichat subprocess for a batch of words.
 
     Returns (parsed_cards, stderr_text or None, is_rate_limit_error).
@@ -225,7 +237,7 @@ def create_flashcards(
     """Creates flashcards via aichat subprocess."""
     os.makedirs(cache_dir, exist_ok=True)
 
-    flashcards_map: dict[str, dict[str, Any]] = {}
+    flashcards_map: dict[str, dict[str, str]] = {}
     flashcards_lock = threading.Lock()
     to_process: list[str] = []
     process_lock = threading.Lock()
@@ -239,7 +251,7 @@ def create_flashcards(
         if os.path.exists(cache_path):
             try:
                 with open(cache_path) as f:
-                    card = json.load(f)
+                    card: dict[str, str] = json.load(f)
                 if validate_flashcard(card, word, verbose=2 if verbose else 0):
                     flashcards_map[word] = card
                     pbar.update(1)

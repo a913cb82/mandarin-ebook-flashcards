@@ -19,7 +19,7 @@ from flashcard import (
 )
 
 
-def _make_aichat_stdout(cards: list[dict]) -> bytes:
+def _make_aichat_stdout(cards: list[dict[str, str]]) -> bytes:
     """Build fake aichat stdout with optional thinking text."""
     thinking = "<think>Okay, I need to generate flashcards.</think>\n\n"
     return (thinking + json.dumps(cards)).encode()
